@@ -22,4 +22,4 @@ Celem aplikacji jest poprawa koncentracji, podejmowania decyzji oraz wydajności
 Aplikacja w trakcie rozwoju
 
 ## 👤 Autor
-Mateusz
+8Mateusz
