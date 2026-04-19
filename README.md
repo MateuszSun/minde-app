@@ -1,16 +1,25 @@
-# gra
+# Minde App
 
-A new Flutter project.
+## 📸 Podgląd
 
-## Getting Started
+Minde to aplikacja do treningu koncentracji i pracy umysłowej stworzona w Flutterze.
 
-This project is a starting point for a Flutter application.
+## 🚀 Funkcje
+- Flow Runner (trening reakcji i rytmu)
+- Moduły treningu pamięci
+- Split Decision (szybkie podejmowanie decyzji)
+- Ćwiczenia skupienia
 
-A few resources to get you started if this is your first Flutter project:
+## 🧠 Cel
+Celem aplikacji jest poprawa koncentracji, podejmowania decyzji oraz wydajności poznawczej poprzez krótkie, interaktywne sesje.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## 🛠 Technologie
+- Flutter / Dart
+- Firebase Hosting
+- Własne komponenty UI
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 📱 Status
+Aplikacja w trakcie rozwoju
+
+## 👤 Autor
+Mateusz
