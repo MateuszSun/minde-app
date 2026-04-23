@@ -16,6 +16,7 @@ import 'package:timezone/timezone.dart' as tz;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+
   await _MindeAlarmService.ensureInitialized();
   final launchedFromAlarm =
       await _MindeAlarmService.didAlarmNotificationLaunchApp();
