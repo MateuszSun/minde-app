@@ -5,7 +5,7 @@ description: "Project Minde"
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 
-version: 1.0.0+1
+version: 1.0.0+4
 
 environment:
   sdk: ^3.10.4
@@ -13,6 +13,8 @@ environment:
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
 
   # The following adds the Cupertino Icons font to your application.
@@ -23,6 +25,7 @@ dependencies:
   flutter_timezone:
     path: packages/flutter_timezone
   timezone: ^0.11.0
+  in_app_purchase: ^3.2.3
 
 dev_dependencies:
   flutter_test:
@@ -35,11 +38,20 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  config:
+    enable-lldb-debugging: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/backgrounds/flow_runner_spaceship_real.jpg
+    - assets/obstacles/meteor_real.png
+    - assets/skins/flow_runner/f16.jpg
+    - assets/skins/flow_runner/helicopter.jpg
+    - assets/skins/flow_runner/rocket.jpg
+    - assets/skins/flow_runner/rocket_real.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
