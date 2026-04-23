@@ -16,7 +16,6 @@ import 'package:timezone/timezone.dart' as tz;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-
   await _MindeAlarmService.ensureInitialized();
   final launchedFromAlarm =
       await _MindeAlarmService.didAlarmNotificationLaunchApp();
@@ -2974,17 +2973,15 @@ _localizedTextMap = <String, Map<_AppLanguage, String>>{
     _AppLanguage.ukrainian: 'Спринт завершено',
     _AppLanguage.russian: 'Спринт завершен',
   },
-  'Masz za sobą pełny ciąg 0-100 bez zatrzymań po drodze.':
-      <_AppLanguage, String>{
-        _AppLanguage.english:
-            'You have completed the full 0-100 sequence without stopping.',
-        _AppLanguage.german:
-            'Du hast die komplette 0-100-Sequenz ohne Unterbrechung abgeschlossen.',
-        _AppLanguage.ukrainian:
-            'Ти пройшов повну послідовність 0-100 без зупинок.',
-        _AppLanguage.russian:
-            'Ты прошел полную последовательность 0-100 без остановок.',
-      },
+  'Masz za sobą pełny ciąg 0-100 bez zatrzymań po drodze.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'You have completed the full 0-100 sequence without stopping.',
+    _AppLanguage.german:
+        'Du hast die komplette 0-100-Sequenz ohne Unterbrechung abgeschlossen.',
+    _AppLanguage.ukrainian: 'Ти пройшов повну послідовність 0-100 без зупинок.',
+    _AppLanguage.russian:
+        'Ты прошел полную последовательность 0-100 без остановок.',
+  },
   'Seria cyfr': <_AppLanguage, String>{
     _AppLanguage.english: 'Digit series',
     _AppLanguage.german: 'Ziffernserie',
@@ -2997,17 +2994,16 @@ _localizedTextMap = <String, Map<_AppLanguage, String>>{
     _AppLanguage.ukrainian: 'Почати серію',
     _AppLanguage.russian: 'Начать серию',
   },
-  'Poziomy układ i wpisywanie całej sekwencji po zniknięciu cyfr.':
-      <_AppLanguage, String>{
-        _AppLanguage.english:
-            'Horizontal layout and typing the whole sequence after digits disappear.',
-        _AppLanguage.german:
-            'Horizontales Layout und Eingabe der ganzen Sequenz, nachdem die Ziffern verschwinden.',
-        _AppLanguage.ukrainian:
-            'Горизонтальний макет і введення всієї послідовності після зникнення цифр.',
-        _AppLanguage.russian:
-            'Горизонтальная раскладка и ввод всей последовательности после исчезновения цифр.',
-      },
+  'Poziomy układ i wpisywanie całej sekwencji po zniknięciu cyfr.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Horizontal layout and typing the whole sequence after digits disappear.',
+    _AppLanguage.german:
+        'Horizontales Layout und Eingabe der ganzen Sequenz, nachdem die Ziffern verschwinden.',
+    _AppLanguage.ukrainian:
+        'Горизонтальний макет і введення всієї послідовності після зникнення цифр.',
+    _AppLanguage.russian:
+        'Горизонтальная раскладка и ввод всей последовательности после исчезновения цифр.',
+  },
   'Sprawdź': <_AppLanguage, String>{
     _AppLanguage.english: 'Check',
     _AppLanguage.german: 'Prüfen',
@@ -4961,6 +4957,18 @@ Future<void> _persistPremiumFromPurchase(PurchaseDetails purchase) async {
   await _setSubscriptionPlan(planId);
 }
 
+Future<void> _persistFeatureUnlockFromPurchase(PurchaseDetails purchase) async {
+  final prefs = await SharedPreferences.getInstance();
+  if (purchase.productID == _mnemonicVaultUnlockProductId) {
+    await prefs.setBool(_mnemonicVaultUnlockedPrefsKey, true);
+    return;
+  }
+
+  if (_mindeIdeasUnlockProductIds.contains(purchase.productID)) {
+    await prefs.setBool(_mindeIdeasUnlockedPrefsKey, true);
+  }
+}
+
 Future<_PremiumPurchaseResult> _startPremiumPurchase(String planId) async {
   if (!_supportsStorePurchases) {
     return const _PremiumPurchaseResult.unavailable(
@@ -5194,9 +5202,9 @@ Future<_DiamondPackPurchaseResult> _startDiamondPackPurchase(int amount) async {
 }
 
 Future<_MnemonicVaultUnlockResult> _startMnemonicVaultUnlockPurchase() async {
-  if (!_supportsGooglePlayPurchases) {
+  if (!_supportsStorePurchases) {
     return const _MnemonicVaultUnlockResult.unavailable(
-      'Płatność działa na Androidzie przez Google Play.',
+      'Płatność działa na Androidzie i iOS.',
     );
   }
 
@@ -5236,6 +5244,7 @@ Future<_MnemonicVaultUnlockResult> _startMnemonicVaultUnlockPurchase() async {
 
         if (purchase.status == PurchaseStatus.purchased ||
             purchase.status == PurchaseStatus.restored) {
+          await _persistFeatureUnlockFromPurchase(purchase);
           if (!purchaseCompleter.isCompleted) {
             purchaseCompleter.complete(
               const _MnemonicVaultUnlockResult.success(),
@@ -5304,9 +5313,9 @@ Future<_MnemonicVaultUnlockResult> _startMnemonicVaultUnlockPurchase() async {
 }
 
 Future<_MindeIdeasUnlockResult> _startMindeIdeasUnlockPurchase() async {
-  if (!_supportsGooglePlayPurchases) {
+  if (!_supportsStorePurchases) {
     return const _MindeIdeasUnlockResult.unavailable(
-      'Płatność działa na Androidzie przez Google Play.',
+      'Płatność działa na Androidzie i iOS.',
     );
   }
 
@@ -5347,6 +5356,7 @@ Future<_MindeIdeasUnlockResult> _startMindeIdeasUnlockPurchase() async {
 
         if (purchase.status == PurchaseStatus.purchased ||
             purchase.status == PurchaseStatus.restored) {
+          await _persistFeatureUnlockFromPurchase(purchase);
           if (!purchaseCompleter.isCompleted) {
             purchaseCompleter.complete(const _MindeIdeasUnlockResult.success());
           }
@@ -8102,7 +8112,9 @@ class _FlowHomePageState extends State<FlowHomePage>
   }
 
   int get _dailyExerciseTarget => exerciseDefinitions
-      .where((ExerciseDefinition exercise) => _countsForDailyProgress(exercise.kind))
+      .where(
+        (ExerciseDefinition exercise) => _countsForDailyProgress(exercise.kind),
+      )
       .length;
 
   int get _completedDailyExercises => _completed
@@ -8192,97 +8204,97 @@ class _FlowHomePageState extends State<FlowHomePage>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: const Color(
-                            0xFFD4A63A,
-                          ).withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.lock_open_rounded,
-                          color: Color(0xFFD4A63A),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Sejf cyfr ∞',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            color: sheetPrimaryText,
-                            fontWeight: FontWeight.w900,
+                    Row(
+                      children: <Widget>[
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFFD4A63A,
+                            ).withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.lock_open_rounded,
+                            color: Color(0xFFD4A63A),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    context.tr(
-                      'Aby otworzyć tę sekcję, wymagana jest jednorazowa opłata 50 zł.',
-                    ),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: sheetSecondaryText,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF152435),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: sheetPanelBorder),
-                    ),
-                    child: Text(
-                      context.tr('Odblokowanie sekcji: 50 zł (jednorazowo)'),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: sheetPrimaryText,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(
-                            sheetContext,
-                            rootNavigator: true,
-                          ).pop('later'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: sheetPrimaryText,
-                            side: const BorderSide(color: sheetPanelBorder),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Sejf cyfr ∞',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: sheetPrimaryText,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
-                          child: Text(context.tr('Nie teraz')),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      context.tr(
+                        'Aby otworzyć tę sekcję, wymagana jest jednorazowa opłata 50 zł.',
+                      ),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: sheetSecondaryText,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF152435),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: sheetPanelBorder),
+                      ),
+                      child: Text(
+                        context.tr('Odblokowanie sekcji: 50 zł (jednorazowo)'),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: sheetPrimaryText,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () => Navigator.of(
-                            sheetContext,
-                            rootNavigator: true,
-                          ).pop('buy'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF4D77B2),
-                            foregroundColor: Colors.white,
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(
+                              sheetContext,
+                              rootNavigator: true,
+                            ).pop('later'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: sheetPrimaryText,
+                              side: const BorderSide(color: sheetPanelBorder),
+                            ),
+                            child: Text(context.tr('Nie teraz')),
                           ),
-                          child: Text(context.tr('Zapłać 50 zł')),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () => Navigator.of(
+                              sheetContext,
+                              rootNavigator: true,
+                            ).pop('buy'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF4D77B2),
+                              foregroundColor: Colors.white,
+                            ),
+                            child: Text(context.tr('Zapłać 50 zł')),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -8695,150 +8707,150 @@ class _FlowHomePageState extends State<FlowHomePage>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: const Color(
-                            0xFFD4A63A,
-                          ).withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.notes_rounded,
-                          color: Color(0xFFD4A63A),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          context.tr('Notatnik Premium'),
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            color: sheetPrimaryText,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    context.tr(
-                      'To miejsce na Twoje kategorie i notatki. Po odblokowaniu możesz wygodnie porządkować pomysły i szybko do nich wracać.',
-                    ),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: sheetSecondaryText,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF152435),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: sheetPanelBorder),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
                       children: <Widget>[
-                        Text(
-                          context.tr('Kategorie'),
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: sheetPrimaryText,
-                            fontWeight: FontWeight.w800,
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFFD4A63A,
+                            ).withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.notes_rounded,
+                            color: Color(0xFFD4A63A),
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          context.tr(
-                            'Ułóż tematy pod siebie i trzymaj porządek.',
-                          ),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: sheetSecondaryText,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          context.tr('Notatki'),
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: sheetPrimaryText,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          context.tr(
-                            'Zapisuj pomysły, checklisty i szybkie myśli w jednym miejscu.',
-                          ),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: sheetSecondaryText,
-                            height: 1.4,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            context.tr('Notatnik Premium'),
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: sheetPrimaryText,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF152435),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: sheetPanelBorder),
-                    ),
-                    child: Text(
-                      context.tr('Koszt odblokowania: 25 zł (jednorazowo)'),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: sheetPrimaryText,
-                        fontWeight: FontWeight.w800,
+                    const SizedBox(height: 12),
+                    Text(
+                      context.tr(
+                        'To miejsce na Twoje kategorie i notatki. Po odblokowaniu możesz wygodnie porządkować pomysły i szybko do nich wracać.',
+                      ),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: sheetSecondaryText,
+                        height: 1.45,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(
-                            sheetContext,
-                            rootNavigator: true,
-                          ).pop('later'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: sheetPrimaryText,
-                            side: const BorderSide(color: sheetPanelBorder),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF152435),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: sheetPanelBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            context.tr('Kategorie'),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: sheetPrimaryText,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                          child: Text(context.tr('Nie teraz')),
+                          const SizedBox(height: 4),
+                          Text(
+                            context.tr(
+                              'Ułóż tematy pod siebie i trzymaj porządek.',
+                            ),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: sheetSecondaryText,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            context.tr('Notatki'),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: sheetPrimaryText,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            context.tr(
+                              'Zapisuj pomysły, checklisty i szybkie myśli w jednym miejscu.',
+                            ),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: sheetSecondaryText,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF152435),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: sheetPanelBorder),
+                      ),
+                      child: Text(
+                        context.tr('Koszt odblokowania: 25 zł (jednorazowo)'),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: sheetPrimaryText,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () => Navigator.of(
-                            sheetContext,
-                            rootNavigator: true,
-                          ).pop('buy'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF4D77B2),
-                            foregroundColor: Colors.white,
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(
+                              sheetContext,
+                              rootNavigator: true,
+                            ).pop('later'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: sheetPrimaryText,
+                              side: const BorderSide(color: sheetPanelBorder),
+                            ),
+                            child: Text(context.tr('Nie teraz')),
                           ),
-                          child: Text(context.tr('Zapłać 25 zł')),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () => Navigator.of(
+                              sheetContext,
+                              rootNavigator: true,
+                            ).pop('buy'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF4D77B2),
+                              foregroundColor: Colors.white,
+                            ),
+                            child: Text(context.tr('Zapłać 25 zł')),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -13549,7 +13561,7 @@ class _MnemonicVaultGameSelectorCardState
                             ),
                           ),
                           child: Center(
-                              child: Text(
+                            child: Text(
                               context.tr(game.label),
                               textAlign: TextAlign.center,
                               style: theme.textTheme.titleLarge?.copyWith(
@@ -17180,10 +17192,7 @@ class _MnemonicSequenceStageShell extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        _MnemonicSequenceStageHeader(
-          label: label,
-          accent: accent,
-        ),
+        _MnemonicSequenceStageHeader(label: label, accent: accent),
         const SizedBox(height: 24),
         child,
       ],
@@ -18101,7 +18110,10 @@ class _MnemonicSequenceSessionViewState
             ),
           ),
           const SizedBox(height: 20),
-          FilledButton(onPressed: _startSession, child: Text(context.tr('Start'))),
+          FilledButton(
+            onPressed: _startSession,
+            child: Text(context.tr('Start')),
+          ),
         ],
       ),
       _MnemonicSequencePhase.countdown => Column(
@@ -18297,7 +18309,10 @@ class _MnemonicSequenceSessionViewState
 
     final List<Widget> controlButtons = switch (_phase) {
       _MnemonicSequencePhase.idle => <Widget>[
-        FilledButton(onPressed: _startSession, child: Text(context.tr('Start'))),
+        FilledButton(
+          onPressed: _startSession,
+          child: Text(context.tr('Start')),
+        ),
       ],
       _MnemonicSequencePhase.countdown ||
       _MnemonicSequencePhase.memorizing => <Widget>[],
@@ -39733,10 +39748,8 @@ String _digitCountLabel(int count) {
 
 String _memoryElementCountLabel(int count) {
   return switch (_activeUiLanguage) {
-    _AppLanguage.english =>
-      '$count ${count == 1 ? 'element' : 'elements'}',
-    _AppLanguage.german =>
-      '$count ${count == 1 ? 'Element' : 'Elemente'}',
+    _AppLanguage.english => '$count ${count == 1 ? 'element' : 'elements'}',
+    _AppLanguage.german => '$count ${count == 1 ? 'Element' : 'Elemente'}',
     _AppLanguage.ukrainian =>
       '$count ${_memoryPluralLabel(count, singular: 'елемент', paucal: 'елементи', plural: 'елементів')}',
     _AppLanguage.russian =>
