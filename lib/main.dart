@@ -4,7 +4,9 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,12 +20,16 @@ Future<void> main() async {
   final launchedFromAlarm =
       await _MindeAlarmService.didAlarmNotificationLaunchApp();
   final preferences = await SharedPreferences.getInstance();
-  final initialPalette = _paletteFromStoredValue(
-    preferences.getString(_appThemePrefsKey),
+  final initialPalette = _paletteForId(_AppThemeId.liquidNight);
+  const initialBackdropId = _AppBackdropId.warriorSpears;
+  final initialLanguage = _appLanguageFromCode(
+    preferences.getString(_appLanguagePrefsKey),
   );
-  final initialBackdropId = _backdropIdFromStoredValue(
-    preferences.getString(_appBackdropPrefsKey),
+  _applyMnemonicCustomLabelsFromRaw(
+    preferences.getString(_mnemonicCustomLabelsPrefsKey),
   );
+  final launchExperienceCompleted =
+      preferences.getBool(_launchExperienceCompletedPrefsKey) ?? false;
   _applySystemUiStyle(initialPalette);
 
   runApp(
@@ -31,7 +37,8 @@ Future<void> main() async {
       preferences: preferences,
       initialPalette: initialPalette,
       initialBackdropId: initialBackdropId,
-      showLaunchExperience: !launchedFromAlarm,
+      initialLanguage: initialLanguage,
+      showLaunchExperience: !launchedFromAlarm && !launchExperienceCompleted,
       openAlarmSheetOnStart: launchedFromAlarm,
     ),
   );
@@ -297,6 +304,5347 @@ class _AlarmSheetResult {
 
 const String _appThemePrefsKey = 'minde_app_theme_v1';
 const String _appBackdropPrefsKey = 'minde_app_backdrop_v1';
+const String _appLanguagePrefsKey = 'minde_app_language_v1';
+const String _launchExperienceCompletedPrefsKey =
+    'minde_launch_experience_completed_v1';
+const String _subscriptionActivePrefsKey = 'minde_subscription_active_v1';
+const String _subscriptionPlanPrefsKey = 'minde_subscription_plan_v1';
+const String _mnemonicVaultUnlockedPrefsKey =
+    'minde_mnemonic_vault_unlocked_v1';
+const String _mindeIdeasUnlockedPrefsKey = 'minde_ideas_unlocked_v1';
+const String _mindeIdeasIntroCompletedPrefsKey =
+    'minde_ideas_intro_completed_v1';
+const String _mnemonicCustomLabelsPrefsKey = 'minde_mnemonic_custom_labels_v1';
+const String _subscriptionPlanInactive = 'inactive';
+const String _subscriptionPlanMonthly = 'monthly_25';
+const String _subscriptionPlanLifetime = 'lifetime_49';
+const String _subscriptionPlanFreeTest = 'free_test';
+const String _monthlyPremiumProductId = 'minde_premium_monthly_25';
+const String _lifetimePremiumProductId = 'minde_premium_lifetime_49';
+const String _mnemonicVaultUnlockProductId = 'minde_mnemonic_vault_unlock_50';
+const String _mindeIdeasUnlockProductId = 'minde_ideas_unlock_25';
+const String _mindeIdeasUnlockLegacyProductId = 'minde-ideas-unlock-25';
+const String _flowRunnerDiamondPack50ProductId = 'minde_diamond_pack_50';
+const String _flowRunnerDiamondPack100ProductId = 'minde_diamond_pack_100';
+const String _flowRunnerDiamondPack500ProductId = 'minde_diamond_pack_500';
+const Set<String> _premiumProductIds = <String>{
+  _monthlyPremiumProductId,
+  _lifetimePremiumProductId,
+};
+const Set<String> _mnemonicVaultUnlockProductIds = <String>{
+  _mnemonicVaultUnlockProductId,
+};
+const Set<String> _mindeIdeasUnlockProductIds = <String>{
+  _mindeIdeasUnlockProductId,
+  _mindeIdeasUnlockLegacyProductId,
+};
+const Set<String> _flowRunnerDiamondPackProductIds = <String>{
+  _flowRunnerDiamondPack50ProductId,
+  _flowRunnerDiamondPack100ProductId,
+  _flowRunnerDiamondPack500ProductId,
+};
+
+enum _AppLanguage { polish, english, german, ukrainian, russian }
+
+extension _AppLanguageData on _AppLanguage {
+  Locale get locale => switch (this) {
+    _AppLanguage.polish => const Locale('pl'),
+    _AppLanguage.english => const Locale('en'),
+    _AppLanguage.german => const Locale('de'),
+    _AppLanguage.ukrainian => const Locale('uk'),
+    _AppLanguage.russian => const Locale('ru'),
+  };
+
+  String get code => locale.languageCode;
+
+  String get flag => switch (this) {
+    _AppLanguage.polish => '🇵🇱',
+    _AppLanguage.english => '🇬🇧',
+    _AppLanguage.german => '🇩🇪',
+    _AppLanguage.ukrainian => '🇺🇦',
+    _AppLanguage.russian => '🇷🇺',
+  };
+}
+
+const List<_AppLanguage> _appLanguages = <_AppLanguage>[
+  _AppLanguage.polish,
+  _AppLanguage.english,
+  _AppLanguage.german,
+  _AppLanguage.ukrainian,
+  _AppLanguage.russian,
+];
+
+_AppLanguage _appLanguageFromCode(String? rawCode) {
+  for (final language in _appLanguages) {
+    if (language.code == rawCode) {
+      return language;
+    }
+  }
+  return _AppLanguage.polish;
+}
+
+_AppLanguage _activeUiLanguage = _AppLanguage.polish;
+
+const Map<String, Map<_AppLanguage, String>>
+_localizedTextMap = <String, Map<_AppLanguage, String>>{
+  'Minde': <_AppLanguage, String>{
+    _AppLanguage.english: 'Minde',
+    _AppLanguage.german: 'Minde',
+    _AppLanguage.ukrainian: 'Minde',
+    _AppLanguage.russian: 'Minde',
+  },
+  'Dalej': <_AppLanguage, String>{
+    _AppLanguage.english: 'Next',
+    _AppLanguage.german: 'Weiter',
+    _AppLanguage.ukrainian: 'Далі',
+    _AppLanguage.russian: 'Далее',
+  },
+  'W jakim języku chcesz otworzyć aplikację?': <_AppLanguage, String>{
+    _AppLanguage.english: 'In which language do you want to open the app?',
+    _AppLanguage.german: 'In welcher Sprache möchtest du die App öffnen?',
+    _AppLanguage.ukrainian: 'Якою мовою ти хочеш відкрити застосунок?',
+    _AppLanguage.russian: 'На каком языке ты хочешь открыть приложение?',
+  },
+  'Czy akceptujesz zapisane informacje?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Do you accept the saved information?',
+    _AppLanguage.german: 'Akzeptierst du die gespeicherten Informationen?',
+    _AppLanguage.ukrainian: 'Чи приймаєш ти збережену інформацію?',
+    _AppLanguage.russian: 'Принимаешь ли ты сохраненную информацию?',
+  },
+  'Ta aplikacja została stworzona z myślą o osobach, które jeszcze nie wiedzą, jak wejść w stan flow i szukają czegoś, co sprawi, że życie stanie się pełniejsze.\n\nPotraktuj ją jak pożywienie dla „komputera w głowie”. Dawka, którą możesz tu otrzymać, to wstęp do budowania fundamentu, po którym wszystko zaczyna płynąć.\n\nNajważniejsze: powtarzaj codziennie, nie przestawaj i zanurz się w flow. Nawet gdy opanujesz ten stan, płyń dalej.\n\nWierzę w Ciebie, Drogi Użytkowniku, i życzę Ci powodzenia.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'This app was created for people who still do not know how to enter a flow state and are looking for something that will make life feel fuller.\n\nTreat it like nutrition for the "computer in your head". The dose you can get here is an introduction to building a foundation on which everything starts to flow.\n\nMost important: repeat daily, do not stop, and immerse yourself in flow. Even when you master this state, keep moving.\n\nI believe in you, dear user, and I wish you success.',
+        _AppLanguage.german:
+            'Diese App wurde fur Menschen entwickelt, die noch nicht wissen, wie sie in den Flow-Zustand kommen, und nach etwas suchen, das das Leben voller macht.\n\nBetrachte sie wie Nahrung fur den "Computer im Kopf". Die Dosis, die du hier bekommen kannst, ist ein Einstieg in den Aufbau eines Fundaments, auf dem alles zu fließen beginnt.\n\nAm wichtigsten: wiederhole es taglich, hore nicht auf und tauche in den Flow ein. Selbst wenn du diesen Zustand beherrschst, fließe weiter.\n\nIch glaube an dich, lieber Nutzer, und ich wunsche dir viel Erfolg.',
+        _AppLanguage.ukrainian:
+            "Цей застосунок створено для людей, які ще не знають, як увійти у стан потоку, і шукають щось, що зробить життя повнішим.\n\nСприймай його як поживу для «комп'ютера в голові». Те, що ти можеш отримати тут, - це вступ до побудови фундаменту, на якому все починає текти.\n\nНайважливіше: повторюй щодня, не зупиняйся і занурюйся в потік. Навіть коли опануєш цей стан, рухайся далі.\n\nЯ вірю в тебе, дорогий користувачу, і бажаю тобі успіху.",
+        _AppLanguage.russian:
+            'Это приложение создано для людей, которые еще не знают, как войти в состояние потока, и ищут то, что сделает жизнь более полной.\n\nВоспринимай его как питание для «компьютера в голове». То, что ты можешь получить здесь, - это вступление к созданию фундамента, на котором все начинает течь.\n\nСамое важное: повторяй ежедневно, не останавливайся и погружайся в поток. Даже когда освоишь это состояние, продолжай движение.\n\nЯ верю в тебя, дорогой пользователь, и желаю тебе успеха.',
+      },
+  'Czas': <_AppLanguage, String>{
+    _AppLanguage.english: 'Time',
+    _AppLanguage.german: 'Zeit',
+    _AppLanguage.ukrainian: 'Час',
+    _AppLanguage.russian: 'Время',
+  },
+  'Cel': <_AppLanguage, String>{
+    _AppLanguage.english: 'Goal',
+    _AppLanguage.german: 'Ziel',
+    _AppLanguage.ukrainian: 'Мета',
+    _AppLanguage.russian: 'Цель',
+  },
+  'Kiedy': <_AppLanguage, String>{
+    _AppLanguage.english: 'When',
+    _AppLanguage.german: 'Wann',
+    _AppLanguage.ukrainian: 'Коли',
+    _AppLanguage.russian: 'Когда',
+  },
+  'Efekt': <_AppLanguage, String>{
+    _AppLanguage.english: 'Effect',
+    _AppLanguage.german: 'Effekt',
+    _AppLanguage.ukrainian: 'Ефект',
+    _AppLanguage.russian: 'Эффект',
+  },
+  'Po co': <_AppLanguage, String>{
+    _AppLanguage.english: 'Why',
+    _AppLanguage.german: 'Wofür',
+    _AppLanguage.ukrainian: 'Навіщо',
+    _AppLanguage.russian: 'Зачем',
+  },
+  'Instrukcja': <_AppLanguage, String>{
+    _AppLanguage.english: 'Instructions',
+    _AppLanguage.german: 'Anleitung',
+    _AppLanguage.ukrainian: 'Інструкція',
+    _AppLanguage.russian: 'Инструкция',
+  },
+  'Trening': <_AppLanguage, String>{
+    _AppLanguage.english: 'Training',
+    _AppLanguage.german: 'Training',
+    _AppLanguage.ukrainian: 'Тренування',
+    _AppLanguage.russian: 'Тренировка',
+  },
+  'Uruchom grę': <_AppLanguage, String>{
+    _AppLanguage.english: 'Start game',
+    _AppLanguage.german: 'Spiel starten',
+    _AppLanguage.ukrainian: 'Запустити гру',
+    _AppLanguage.russian: 'Запустить игру',
+  },
+  'Jak grać': <_AppLanguage, String>{
+    _AppLanguage.english: 'How to play',
+    _AppLanguage.german: 'So spielst du',
+    _AppLanguage.ukrainian: 'Як грати',
+    _AppLanguage.russian: 'Как играть',
+  },
+  'Jak korzystać': <_AppLanguage, String>{
+    _AppLanguage.english: 'How to use',
+    _AppLanguage.german: 'So nutzt du es',
+    _AppLanguage.ukrainian: 'Як користуватись',
+    _AppLanguage.russian: 'Как пользоваться',
+  },
+  'Jak wykonać sesję': <_AppLanguage, String>{
+    _AppLanguage.english: 'How to run a session',
+    _AppLanguage.german: 'So fuhrst du eine Session aus',
+    _AppLanguage.ukrainian: 'Як пройти сесію',
+    _AppLanguage.russian: 'Как пройти сессию',
+  },
+  'Co znajdziesz w boxie': <_AppLanguage, String>{
+    _AppLanguage.english: 'What you will find in the box',
+    _AppLanguage.german: 'Was du in der Box findest',
+    _AppLanguage.ukrainian: 'Що ти знайдеш у боксі',
+    _AppLanguage.russian: 'Что ты найдешь в боксе',
+  },
+  'Co robi to ćwiczenie': <_AppLanguage, String>{
+    _AppLanguage.english: 'What this exercise does',
+    _AppLanguage.german: 'Was diese Ubung macht',
+    _AppLanguage.ukrainian: 'Що дає ця вправа',
+    _AppLanguage.russian: 'Что дает это упражнение',
+  },
+  'Otwórz': <_AppLanguage, String>{
+    _AppLanguage.english: 'Open',
+    _AppLanguage.german: 'Offnen',
+    _AppLanguage.ukrainian: 'Відкрити',
+    _AppLanguage.russian: 'Открыть',
+  },
+  'Punkt Centralny': <_AppLanguage, String>{
+    _AppLanguage.english: 'Center Dot',
+    _AppLanguage.german: 'Zentralpunkt',
+    _AppLanguage.ukrainian: 'Центральна Точка',
+    _AppLanguage.russian: 'Центральная Точка',
+  },
+  'Spokojniejszy wzrok i szybszy powrót do jednego punktu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english: 'Calmer eyes and a faster return to one point.',
+        _AppLanguage.german:
+            'Ruhigerer Blick und eine schnellere Rückkehr zu einem Punkt.',
+        _AppLanguage.ukrainian:
+            'Спокійніший погляд і швидше повернення до однієї точки.',
+        _AppLanguage.russian:
+            'Более спокойный взгляд и более быстрое возвращение к одной точке.',
+      },
+  'Patrzysz w centralną kropkę bez szukania nowych bodźców. To prosty trening stabilnej uwagi i wyciszania wewnętrznego szumu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You look at a central dot without searching for new stimuli. This is a simple practice of steady attention and quieting internal noise.',
+        _AppLanguage.german:
+            'Du schaust auf einen zentralen Punkt, ohne neue Reize zu suchen. Das ist ein einfaches Training für stabile Aufmerksamkeit und weniger inneres Rauschen.',
+        _AppLanguage.ukrainian:
+            'Ти дивишся на центральну точку, не шукаючи нових подразників. Це просте тренування стабільної уваги й зниження внутрішнього шуму.',
+        _AppLanguage.russian:
+            'Ты смотришь в центральную точку, не ища новых стимулов. Это простая тренировка устойчивого внимания и снижения внутреннего шума.',
+      },
+  'Wybierz 2, 5 albo 10 minut i usiądź bez poruszania telefonem.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Choose 2, 5, or 10 minutes and sit without moving your phone.',
+        _AppLanguage.german:
+            'Wähle 2, 5 oder 10 Minuten und sitze, ohne das Telefon zu bewegen.',
+        _AppLanguage.ukrainian:
+            'Обери 2, 5 або 10 хвилин і сядь, не рухаючи телефон.',
+        _AppLanguage.russian:
+            'Выбери 2, 5 или 10 минут и сядь, не двигая телефон.',
+      },
+  'Patrz w sam środek kropki i wracaj do niej za każdym razem, gdy odpływasz.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Look at the exact center of the dot and return to it every time your mind drifts.',
+        _AppLanguage.german:
+            'Schau auf die genaue Mitte des Punktes und kehre jedes Mal dorthin zurück, wenn du abschweifst.',
+        _AppLanguage.ukrainian:
+            'Дивись у самий центр точки й повертайся до неї щоразу, коли відпливаєш.',
+        _AppLanguage.russian:
+            'Смотри в самый центр точки и возвращайся к ней каждый раз, когда отвлекаешься.',
+      },
+  'Oddychaj naturalnie. Nie walcz z myślami, tylko wracaj do punktu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Breathe naturally. Do not fight your thoughts, just return to the point.',
+        _AppLanguage.german:
+            'Atme natürlich. Kämpfe nicht gegen Gedanken, sondern kehre zum Punkt zurück.',
+        _AppLanguage.ukrainian:
+            'Дихай природно. Не борися з думками, просто повертайся до точки.',
+        _AppLanguage.russian:
+            'Дыши естественно. Не борись с мыслями, просто возвращайся к точке.',
+      },
+  'Spokój centrum': <_AppLanguage, String>{
+    _AppLanguage.english: 'Center calm',
+    _AppLanguage.german: 'Zentrum-Ruhe',
+    _AppLanguage.ukrainian: 'Спокій центру',
+    _AppLanguage.russian: 'Спокойствие центра',
+  },
+  'Patrz w punkt. Jeśli myśli odpłyną, wróć do środka bez oceniania.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Look at the point. If your thoughts drift away, return to the center without judging.',
+    _AppLanguage.german:
+        'Blicke auf den Punkt. Wenn Gedanken abschweifen, kehre ohne Bewertung zur Mitte zurück.',
+    _AppLanguage.ukrainian:
+        'Дивись у точку. Якщо думки відпливають, повернись у центр без оцінювання.',
+    _AppLanguage.russian:
+        'Смотри в точку. Если мысли уплывают, возвращайся в центр без оценивания.',
+  },
+  'Wybierz wygląd punktu': <_AppLanguage, String>{
+    _AppLanguage.english: 'Choose dot style',
+    _AppLanguage.german: 'Punktstil wählen',
+    _AppLanguage.ukrainian: 'Обери стиль точки',
+    _AppLanguage.russian: 'Выбери стиль точки',
+  },
+  'Jasny': <_AppLanguage, String>{
+    _AppLanguage.english: 'Light',
+    _AppLanguage.german: 'Hell',
+    _AppLanguage.ukrainian: 'Світлий',
+    _AppLanguage.russian: 'Светлый',
+  },
+  'Klasyczny': <_AppLanguage, String>{
+    _AppLanguage.english: 'Classic',
+    _AppLanguage.german: 'Klassisch',
+    _AppLanguage.ukrainian: 'Класичний',
+    _AppLanguage.russian: 'Классический',
+  },
+  'Czerwony': <_AppLanguage, String>{
+    _AppLanguage.english: 'Red',
+    _AppLanguage.german: 'Rot',
+    _AppLanguage.ukrainian: 'Червоний',
+    _AppLanguage.russian: 'Красный',
+  },
+  'Białe tło i czarna kropka': <_AppLanguage, String>{
+    _AppLanguage.english: 'White background and a black dot',
+    _AppLanguage.german: 'Weißer Hintergrund und schwarzer Punkt',
+    _AppLanguage.ukrainian: 'Біле тло і чорна точка',
+    _AppLanguage.russian: 'Белый фон и черная точка',
+  },
+  'Czarne tło i biała kropka': <_AppLanguage, String>{
+    _AppLanguage.english: 'Black background and a white dot',
+    _AppLanguage.german: 'Schwarzer Hintergrund und weißer Punkt',
+    _AppLanguage.ukrainian: 'Чорне тло і біла точка',
+    _AppLanguage.russian: 'Черный фон и белая точка',
+  },
+  'Czarne tło i czerwona kropka': <_AppLanguage, String>{
+    _AppLanguage.english: 'Black background and a red dot',
+    _AppLanguage.german: 'Schwarzer Hintergrund und roter Punkt',
+    _AppLanguage.ukrainian: 'Чорне тло і червона точка',
+    _AppLanguage.russian: 'Черный фон и красная точка',
+  },
+  'Granatowe tło i turkusowa kulka': <_AppLanguage, String>{
+    _AppLanguage.english: 'Navy background and a turquoise orb',
+    _AppLanguage.german: 'Marineblauer Hintergrund und türkisfarbene Kugel',
+    _AppLanguage.ukrainian: 'Темно-синє тло і бірюзова кулька',
+    _AppLanguage.russian: 'Темно-синий фон и бирюзовый шар',
+  },
+  'Ciepłe tło i bursztynowa kulka': <_AppLanguage, String>{
+    _AppLanguage.english: 'Warm background and an amber orb',
+    _AppLanguage.german: 'Warmer Hintergrund und bernsteinfarbene Kugel',
+    _AppLanguage.ukrainian: 'Тепле тло і бурштинова кулька',
+    _AppLanguage.russian: 'Теплый фон и янтарный шар',
+  },
+  'Przestrzenna siatka i kulka 3D': <_AppLanguage, String>{
+    _AppLanguage.english: 'Spatial grid and a 3D orb',
+    _AppLanguage.german: 'Räumliches Gitter und 3D-Kugel',
+    _AppLanguage.ukrainian: 'Просторова сітка і 3D-кулька',
+    _AppLanguage.russian: 'Пространственная сетка и 3D-шар',
+  },
+  'Skan Koncentracji': <_AppLanguage, String>{
+    _AppLanguage.english: 'Focus Scan',
+    _AppLanguage.german: 'Konzentrationsscan',
+    _AppLanguage.ukrainian: 'Скан Концентрації',
+    _AppLanguage.russian: 'Скан Концентрации',
+  },
+  'Mocniejszy filtr uwagi, szybsze przełączanie reguły i lepsza pamięć robocza.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Stronger attention filtering, faster rule switching, and better working memory.',
+        _AppLanguage.german:
+            'Stärkerer Aufmerksamkeitsfilter, schnelleres Umschalten der Regel und besseres Arbeitsgedächtnis.',
+        _AppLanguage.ukrainian:
+            "Сильніший фільтр уваги, швидше перемикання правила й краща робоча пам'ять.",
+        _AppLanguage.russian:
+            'Более сильная фильтрация внимания, более быстрое переключение правил и лучшая рабочая память.',
+      },
+  'Zaczynasz od prostego konfliktu słowo kontra kolor. Potem dochodzi tło, a na końcu odpowiadasz o poprzedniej planszy. Każdy poziom wzmacnia inny element koncentracji.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You start with a simple word-versus-color conflict. Then the background is added, and at the end you answer about the previous board. Each level strengthens a different part of concentration.',
+        _AppLanguage.german:
+            'Du beginnst mit einem einfachen Konflikt Wort gegen Farbe. Dann kommt der Hintergrund dazu, und am Ende antwortest du zur vorherigen Tafel. Jedes Level stärkt einen anderen Teil der Konzentration.',
+        _AppLanguage.ukrainian:
+            'Ти починаєш із простого конфлікту слово проти кольору. Потім додається тло, а в кінці ти відповідаєш про попередній екран. Кожен рівень зміцнює інший компонент концентрації.',
+        _AppLanguage.russian:
+            'Ты начинаешь с простого конфликта слово против цвета. Затем добавляется фон, а в конце ты отвечаешь про предыдущий экран. Каждый уровень усиливает отдельный компонент концентрации.',
+      },
+  'Skan Potrójny': <_AppLanguage, String>{
+    _AppLanguage.english: 'Triple Scan',
+    _AppLanguage.german: 'Dreifach-Scan',
+    _AppLanguage.ukrainian: 'Потрійний Скан',
+    _AppLanguage.russian: 'Тройной Скан',
+  },
+  'Echo Pamięci': <_AppLanguage, String>{
+    _AppLanguage.english: 'Memory Echo',
+    _AppLanguage.german: 'Gedächtnis-Echo',
+    _AppLanguage.ukrainian: "Ехо Пам'яті",
+    _AppLanguage.russian: 'Эхо Памяти',
+  },
+  'Jedna decyzja: czy kolor czcionki zgadza się z tym, co czytasz.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'One decision: does the font color match what you read?',
+        _AppLanguage.german:
+            'Eine Entscheidung: Passt die Schriftfarbe zu dem, was du liest?',
+        _AppLanguage.ukrainian:
+            'Одне рішення: чи збігається колір шрифту з тим, що ти читаєш?',
+        _AppLanguage.russian:
+            'Одно решение: совпадает ли цвет шрифта с тем, что ты читаешь?',
+      },
+  'Dochodzi tło, a pytanie zmienia filtr między napisem, barwą i planszą.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'The background joins in, and the question shifts the filter between the word, color, and board.',
+        _AppLanguage.german:
+            'Der Hintergrund kommt dazu, und die Frage wechselt den Filter zwischen Wort, Farbe und Tafel.',
+        _AppLanguage.ukrainian:
+            'Додається тло, а запитання змінює фільтр між словом, кольором і екраном.',
+        _AppLanguage.russian:
+            'Добавляется фон, а вопрос переключает фильтр между словом, цветом и экраном.',
+      },
+  'Odpowiadasz o poprzedniej planszy, więc patrzysz, pamiętasz i porównujesz.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You answer about the previous board, so you observe, remember, and compare.',
+        _AppLanguage.german:
+            'Du antwortest zur vorherigen Tafel, also beobachtest, erinnerst und vergleichst du.',
+        _AppLanguage.ukrainian:
+            'Ти відповідаєш про попередній екран, тож дивишся, пам’ятаєш і порівнюєш.',
+        _AppLanguage.russian:
+            'Ты отвечаешь про предыдущий экран, поэтому наблюдаешь, запоминаешь и сравниваешь.',
+      },
+  'Trening przełączania uwagi i odcinania rozpraszaczy.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Training attention switching and cutting off distractions.',
+    _AppLanguage.german:
+        'Training zum Umschalten der Aufmerksamkeit und Ausblenden von Ablenkungen.',
+    _AppLanguage.ukrainian:
+        'Тренування перемикання уваги та відсікання відволікань.',
+    _AppLanguage.russian:
+        'Тренировка переключения внимания и отсечения отвлекающих факторов.',
+  },
+  'Trening pamięci roboczej i kontroli impulsu pod presją.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Training working memory and impulse control under pressure.',
+    _AppLanguage.german:
+        'Training des Arbeitsgedächtnisses und der Impulskontrolle unter Druck.',
+    _AppLanguage.ukrainian:
+        "Тренування робочої пам'яті та контролю імпульсу під тиском.",
+    _AppLanguage.russian:
+        'Тренировка рабочей памяти и контроля импульса под давлением.',
+  },
+  'Podstawowa': <_AppLanguage, String>{
+    _AppLanguage.english: 'Basic',
+    _AppLanguage.german: 'Basis',
+    _AppLanguage.ukrainian: 'Базовий',
+  },
+  'Średnia': <_AppLanguage, String>{
+    _AppLanguage.english: 'Medium',
+    _AppLanguage.german: 'Mittel',
+    _AppLanguage.ukrainian: 'Середній',
+  },
+  'Hard': <_AppLanguage, String>{
+    _AppLanguage.english: 'Hard',
+    _AppLanguage.german: 'Schwer',
+    _AppLanguage.ukrainian: 'Складний',
+  },
+  'TAK': <_AppLanguage, String>{
+    _AppLanguage.english: 'YES',
+    _AppLanguage.german: 'JA',
+    _AppLanguage.ukrainian: 'ТАК',
+  },
+  'NIE': <_AppLanguage, String>{
+    _AppLanguage.english: 'NO',
+    _AppLanguage.german: 'NEIN',
+    _AppLanguage.ukrainian: 'НІ',
+  },
+  'CZERWONY': <_AppLanguage, String>{
+    _AppLanguage.english: 'RED',
+    _AppLanguage.german: 'ROT',
+    _AppLanguage.ukrainian: 'ЧЕРВОНИЙ',
+  },
+  'ZIELONY': <_AppLanguage, String>{
+    _AppLanguage.english: 'GREEN',
+    _AppLanguage.german: 'GRÜN',
+    _AppLanguage.ukrainian: 'ЗЕЛЕНИЙ',
+  },
+  'NIEBIESKI': <_AppLanguage, String>{
+    _AppLanguage.english: 'BLUE',
+    _AppLanguage.german: 'BLAU',
+    _AppLanguage.ukrainian: 'СИНІЙ',
+  },
+  'ZŁOTY': <_AppLanguage, String>{
+    _AppLanguage.english: 'GOLD',
+    _AppLanguage.german: 'GOLD',
+    _AppLanguage.ukrainian: 'ЗОЛОТИЙ',
+  },
+  'TŁO': <_AppLanguage, String>{
+    _AppLanguage.english: 'BACKGROUND',
+    _AppLanguage.german: 'HINTERGRUND',
+    _AppLanguage.ukrainian: 'ТЛО',
+    _AppLanguage.russian: 'ФОН',
+  },
+  'START ZA': <_AppLanguage, String>{
+    _AppLanguage.english: 'START IN',
+    _AppLanguage.german: 'START IN',
+    _AppLanguage.ukrainian: 'СТАРТ ЧЕРЕЗ',
+    _AppLanguage.russian: 'СТАРТ ЧЕРЕЗ',
+  },
+  'Koniec sesji': <_AppLanguage, String>{
+    _AppLanguage.english: 'Session complete',
+    _AppLanguage.german: 'Sitzung beendet',
+    _AppLanguage.ukrainian: 'Сесію завершено',
+    _AppLanguage.russian: 'Сессия завершена',
+  },
+  'Punkty': <_AppLanguage, String>{
+    _AppLanguage.english: 'Points',
+    _AppLanguage.german: 'Punkte',
+    _AppLanguage.ukrainian: 'Бали',
+    _AppLanguage.russian: 'Очки',
+  },
+  'pkt': <_AppLanguage, String>{
+    _AppLanguage.english: 'pts',
+    _AppLanguage.german: 'Pkt',
+    _AppLanguage.ukrainian: 'бал',
+    _AppLanguage.russian: 'очк',
+  },
+  'Zagraj ponownie': <_AppLanguage, String>{
+    _AppLanguage.english: 'Play again',
+    _AppLanguage.german: 'Nochmal spielen',
+    _AppLanguage.ukrainian: 'Зіграти знову',
+    _AppLanguage.russian: 'Сыграть снова',
+  },
+  'Split Decision': <_AppLanguage, String>{
+    _AppLanguage.english: 'Split Decision',
+    _AppLanguage.german: 'Split Decision',
+    _AppLanguage.ukrainian: 'Split Decision',
+    _AppLanguage.russian: 'Split Decision',
+  },
+  'Szybsze filtrowanie bodźców i pewniejsze hamowanie reakcji.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Faster stimulus filtering and more confident response inhibition.',
+        _AppLanguage.german:
+            'Schnelleres Filtern von Reizen und sicherere Reaktionshemmung.',
+        _AppLanguage.ukrainian:
+            'Швидше фільтрування стимулів і впевненіше гальмування реакції.',
+        _AppLanguage.russian:
+            'Более быстрое фильтрование стимулов и более уверенное торможение реакции.',
+      },
+  'To ćwiczenie rozwija szybkie filtrowanie bodźców, kontrolę impulsu i zmianę reguły pod presją czasu. Uczysz się wychwytywać właściwy sygnał, ignorować resztę i reagować bez chaosu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'This exercise builds rapid stimulus filtering, impulse control, and rule switching under time pressure. You learn to catch the right signal, ignore the rest, and react without chaos.',
+        _AppLanguage.german:
+            'Diese Übung trainiert schnelles Filtern von Reizen, Impulskontrolle und Regelwechsel unter Zeitdruck. Du lernst, das richtige Signal zu erfassen, den Rest zu ignorieren und ohne Chaos zu reagieren.',
+        _AppLanguage.ukrainian:
+            'Ця вправа розвиває швидке фільтрування стимулів, контроль імпульсу та зміну правила під тиском часу. Ти вчишся вловлювати правильний сигнал, ігнорувати решту й реагувати без хаосу.',
+        _AppLanguage.russian:
+            'Это упражнение развивает быстрое фильтрование стимулов, контроль импульса и смену правил под давлением времени. Ты учишься ловить верный сигнал, игнорировать остальное и реагировать без хаоса.',
+      },
+  'Poziomy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Levels',
+    _AppLanguage.german: 'Level',
+    _AppLanguage.ukrainian: 'Рівні',
+    _AppLanguage.russian: 'Уровни',
+  },
+  'Poziomy gry': <_AppLanguage, String>{
+    _AppLanguage.english: 'Game levels',
+    _AppLanguage.german: 'Spiellevel',
+    _AppLanguage.ukrainian: 'Рівні гри',
+    _AppLanguage.russian: 'Уровни игры',
+  },
+  'Poziom {level}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Level {level}',
+    _AppLanguage.german: 'Level {level}',
+    _AppLanguage.ukrainian: 'Рівень {level}',
+    _AppLanguage.russian: 'Уровень {level}',
+  },
+  'Wybierz poziom startowy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Choose starting level',
+    _AppLanguage.german: 'Startlevel wählen',
+    _AppLanguage.ukrainian: 'Обери стартовий рівень',
+    _AppLanguage.russian: 'Выбери стартовый уровень',
+  },
+  'Poziomy 1-5': <_AppLanguage, String>{
+    _AppLanguage.english: 'Levels 1-5',
+    _AppLanguage.german: 'Level 1-5',
+    _AppLanguage.ukrainian: 'Рівні 1-5',
+    _AppLanguage.russian: 'Уровни 1-5',
+  },
+  'Free Premium (test)': <_AppLanguage, String>{
+    _AppLanguage.english: 'Free Premium (test)',
+    _AppLanguage.german: 'Kostenloses Premium (Test)',
+    _AppLanguage.ukrainian: 'Безкоштовний Premium (тест)',
+    _AppLanguage.russian: 'Бесплатный Premium (тест)',
+  },
+  'Wersja testowa dla Ciebie': <_AppLanguage, String>{
+    _AppLanguage.english: 'Test version for you',
+    _AppLanguage.german: 'Testversion für dich',
+    _AppLanguage.ukrainian: 'Тестова версія для тебе',
+    _AppLanguage.russian: 'Тестовая версия для тебя',
+  },
+  'Aktywuj natychmiast bez płatności (wersja testowa).': <_AppLanguage, String>{
+    _AppLanguage.english: 'Activate instantly without payment (test version).',
+    _AppLanguage.german: 'Sofort ohne Zahlung aktivieren (Testversion).',
+    _AppLanguage.ukrainian: 'Активуй миттєво без оплати (тестова версія).',
+    _AppLanguage.russian: 'Активируй мгновенно без оплаты (тестовая версия).',
+  },
+  'Włącz FREE': <_AppLanguage, String>{
+    _AppLanguage.english: 'Enable FREE',
+    _AppLanguage.german: 'FREE aktivieren',
+    _AppLanguage.ukrainian: 'Увімкнути FREE',
+    _AppLanguage.russian: 'Включить FREE',
+  },
+  'Premium aktywne: {plan}. Możesz grać w gry premium.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Premium active: {plan}. You can play premium games.',
+    _AppLanguage.german:
+        'Premium aktiv: {plan}. Du kannst Premium-Spiele spielen.',
+    _AppLanguage.ukrainian:
+        'Преміум активний: {plan}. Ти можеш грати в преміум-ігри.',
+    _AppLanguage.russian:
+        'Премиум активен: {plan}. Ты можешь играть в премиум-игры.',
+  },
+  'Szybki skan: kolor i słowo są zgodne?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Quick scan: do the color and word match?',
+    _AppLanguage.german: 'Schnellscan: Stimmen Farbe und Wort überein?',
+    _AppLanguage.ukrainian: 'Швидкий скан: колір і слово збігаються?',
+  },
+  'To, co widzisz, zgadza się z napisem?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Does what you see match the word?',
+    _AppLanguage.german: 'Passt das, was du siehst, zum Wort?',
+    _AppLanguage.ukrainian: 'Те, що ти бачиш, збігається з написом?',
+  },
+  'Zatrzymaj czytanie. Barwa i słowo pasują?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Stop reading. Do color and word align?',
+    _AppLanguage.german: 'Hör auf zu lesen. Passen Farbe und Wort zusammen?',
+    _AppLanguage.ukrainian: 'Зупини читання. Колір і слово збігаються?',
+  },
+  'Patrz na barwę napisu i zatrzymaj odruch czytania.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Focus on the text color and stop the automatic reading reflex.',
+    _AppLanguage.german:
+        'Konzentriere dich auf die Schriftfarbe und stoppe den automatischen Lesereflex.',
+    _AppLanguage.ukrainian:
+        'Дивись на колір напису й зупини автоматичний рефлекс читання.',
+  },
+  'Liczy się tylko kolor liter. Reszta to szum.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Only the letter color matters. The rest is noise.',
+    _AppLanguage.german:
+        'Nur die Buchstabenfarbe zählt. Der Rest ist Rauschen.',
+    _AppLanguage.ukrainian: 'Важливий лише колір літер. Решта - шум.',
+  },
+  'Jedna zasada, szybka decyzja, zero domysłów.': <_AppLanguage, String>{
+    _AppLanguage.english: 'One rule, quick decision, no guessing.',
+    _AppLanguage.german: 'Eine Regel, schnelle Entscheidung, kein Raten.',
+    _AppLanguage.ukrainian: 'Одне правило, швидке рішення, жодних здогадів.',
+  },
+  'Odetnij resztę. Jaki jest kolor czcionki?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Cut out the rest. What is the font color?',
+    _AppLanguage.german: 'Blende den Rest aus. Welche Farbe hat die Schrift?',
+    _AppLanguage.ukrainian: 'Відсічи решту. Який колір шрифту?',
+  },
+  'Patrz tylko na barwę liter. Co widzisz?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Look only at the letter color. What do you see?',
+    _AppLanguage.german: 'Schau nur auf die Buchstabenfarbe. Was siehst du?',
+    _AppLanguage.ukrainian: 'Дивись лише на колір літер. Що ти бачиш?',
+  },
+  'Filtr na kolor czcionki. Wskaż właściwy.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Filter for font color. Pick the correct one.',
+    _AppLanguage.german: 'Filter auf die Schriftfarbe. Wähle die richtige aus.',
+    _AppLanguage.ukrainian: 'Фільтр на колір шрифту. Вкажи правильний.',
+  },
+  'Ignoruj treść słowa i tło. Liczy się wyłącznie czcionka.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Ignore the word meaning and background. Only font color matters.',
+        _AppLanguage.german:
+            'Ignoriere Wortbedeutung und Hintergrund. Nur die Schriftfarbe zählt.',
+        _AppLanguage.ukrainian:
+            'Ігноруй значення слова й тло. Важливий лише колір шрифту.',
+      },
+  'Czytaj precyzyjnie. Co jest napisane?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Read precisely. What word is shown?',
+    _AppLanguage.german: 'Lies genau. Welches Wort steht da?',
+    _AppLanguage.ukrainian: 'Читай точно. Що написано?',
+  },
+  'Teraz liczy się samo słowo. Co czytasz?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Now only the word matters. What do you read?',
+    _AppLanguage.german: 'Jetzt zählt nur das Wort. Was liest du?',
+    _AppLanguage.ukrainian: 'Тепер важливе лише слово. Що ти читаєш?',
+  },
+  'Przełącz filtr na tekst. Wskaż napis.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Switch filter to text. Select the word.',
+    _AppLanguage.german: 'Schalte den Filter auf Text. Wähle das Wort.',
+    _AppLanguage.ukrainian: 'Перемкни фільтр на текст. Обери напис.',
+  },
+  'Zmień fokus na tło. Jaki kolor ma plansza?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Shift focus to background. What color is the board?',
+    _AppLanguage.german:
+        'Wechsle den Fokus auf den Hintergrund. Welche Farbe hat die Fläche?',
+    _AppLanguage.ukrainian: 'Зміни фокус на тло. Який колір має поле?',
+  },
+  'Teraz liczy się tylko tło. Co widzisz za napisem?': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Now only the background matters. What do you see behind the word?',
+    _AppLanguage.german:
+        'Jetzt zählt nur der Hintergrund. Was siehst du hinter dem Wort?',
+    _AppLanguage.ukrainian: 'Тепер важливе лише тло. Що ти бачиш за словом?',
+  },
+  'Odetnij napis i czcionkę. Wskaż kolor planszy.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Ignore word and font. Select the board color.',
+    _AppLanguage.german:
+        'Blende Wort und Schrift aus. Wähle die Hintergrundfarbe.',
+    _AppLanguage.ukrainian: 'Відсічи напис і шрифт. Вкажи колір поля.',
+  },
+  'Skup się na tle. Tekst ma tylko rozpraszać.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Focus on the background. The text is only a distractor.',
+    _AppLanguage.german:
+        'Konzentriere dich auf den Hintergrund. Der Text ist nur Ablenkung.',
+    _AppLanguage.ukrainian: 'Сконцентруйся на тлі. Текст тут лише відволікає.',
+  },
+  'Czy napis zgadza się z kolorem czcionki?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Does the word match the font color?',
+    _AppLanguage.german: 'Passt das Wort zur Schriftfarbe?',
+    _AppLanguage.ukrainian: 'Чи збігається слово з кольором шрифту?',
+  },
+  'Porównaj tylko te dwie warstwy: słowo i barwę liter.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Compare only these two layers: the word and letter color.',
+        _AppLanguage.german:
+            'Vergleiche nur diese zwei Ebenen: Wort und Buchstabenfarbe.',
+        _AppLanguage.ukrainian:
+            'Порівняй лише ці два шари: слово і колір літер.',
+      },
+  'Czy kolor czcionki zgadza się z tłem?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Does the font color match the background?',
+    _AppLanguage.german: 'Passt die Schriftfarbe zum Hintergrund?',
+    _AppLanguage.ukrainian: 'Чи збігається колір шрифту з тлом?',
+  },
+  'Trzymaj wzrok na relacji czcionka kontra plansza.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Keep your eyes on the relation between font and board.',
+    _AppLanguage.german:
+        'Halte den Blick auf der Beziehung zwischen Schrift und Hintergrund.',
+    _AppLanguage.ukrainian: 'Тримай погляд на звʼязці шрифт проти поля.',
+  },
+  'Czy napis zgadza się z kolorem tła?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Does the word match the background color?',
+    _AppLanguage.german: 'Passt das Wort zur Hintergrundfarbe?',
+    _AppLanguage.ukrainian: 'Чи збігається слово з кольором тла?',
+  },
+  'Porównujesz słowo z planszą, nie z samą czcionką.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Compare the word with the board, not with font color.',
+    _AppLanguage.german:
+        'Vergleiche das Wort mit dem Hintergrund, nicht mit der Schriftfarbe.',
+    _AppLanguage.ukrainian:
+        'Порівнюй слово з полем, а не лише з кольором шрифту.',
+  },
+  'Plansza startowa: zapamiętaj układ i wskaż kolor czcionki.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Start board: memorize the layout and indicate the font color.',
+        _AppLanguage.german:
+            'Starttafel: Merke dir das Layout und nenne die Schriftfarbe.',
+        _AppLanguage.ukrainian:
+            'Стартове поле: запамʼятай розклад і вкажи колір шрифту.',
+      },
+  'Od następnej rundy odpowiadasz o poprzedniej planszy.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'From the next round, you answer about the previous board.',
+        _AppLanguage.german:
+            'Ab der nächsten Runde antwortest du zur vorherigen Tafel.',
+        _AppLanguage.ukrainian:
+            'З наступного раунду ти відповідаєш про попереднє поле.',
+      },
+  'Plansza startowa: zapamiętaj układ i wskaż, co jest napisane.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Start board: memorize the layout and indicate the written word.',
+        _AppLanguage.german:
+            'Starttafel: Merke dir das Layout und nenne das geschriebene Wort.',
+        _AppLanguage.ukrainian:
+            'Стартове поле: запамʼятай розклад і вкажи написане слово.',
+      },
+  'To ostatni raz, gdy odpowiadasz o tym, co widzisz teraz.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'This is the last time you answer about what you see now.',
+        _AppLanguage.german:
+            'Das ist das letzte Mal, dass du zu dem antwortest, was du jetzt siehst.',
+        _AppLanguage.ukrainian:
+            'Це останній раз, коли ти відповідаєш про те, що бачиш зараз.',
+      },
+  'Plansza startowa: zapamiętaj układ i wskaż kolor tła.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Start board: memorize the layout and indicate the background color.',
+    _AppLanguage.german:
+        'Starttafel: Merke dir das Layout und nenne die Hintergrundfarbe.',
+    _AppLanguage.ukrainian:
+        'Стартове поле: запамʼятай розклад і вкажи колір тла.',
+  },
+  'Zaraz zaczniesz pracować na pamięci poprzedniej planszy.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'In a moment you will work from memory of the previous board.',
+        _AppLanguage.german:
+            'Gleich arbeitest du aus dem Gedächtnis der vorherigen Tafel.',
+        _AppLanguage.ukrainian:
+            'Зараз ти почнеш працювати з памʼяттю про попереднє поле.',
+      },
+  'Poprzednia plansza: jaki był kolor czcionki?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Previous board: what was the font color?',
+    _AppLanguage.german: 'Vorherige Tafel: Welche Schriftfarbe war es?',
+    _AppLanguage.ukrainian: 'Попереднє поле: який був колір шрифту?',
+  },
+  'Nie odpowiadaj o tym, co widzisz teraz. Cofnij się o jedną planszę.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Do not answer about what you see now. Go back one board.',
+        _AppLanguage.german:
+            'Antworte nicht auf das, was du jetzt siehst. Geh eine Tafel zurück.',
+        _AppLanguage.ukrainian:
+            'Не відповідай про те, що бачиш зараз. Відступи на одне поле назад.',
+      },
+  'Poprzednia plansza: co było napisane?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Previous board: what word was shown?',
+    _AppLanguage.german: 'Vorherige Tafel: Welches Wort stand dort?',
+    _AppLanguage.ukrainian: 'Попереднє поле: яке слово було написано?',
+  },
+  'Trzymaj poprzedni napis w pamięci i odetnij aktualny bodziec.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Keep the previous word in memory and ignore the current stimulus.',
+        _AppLanguage.german:
+            'Behalte das vorige Wort im Gedächtnis und blende den aktuellen Reiz aus.',
+        _AppLanguage.ukrainian:
+            'Тримай попереднє слово в памʼяті й відсічи поточний стимул.',
+      },
+  'Poprzednia plansza: jakie było tło?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Previous board: what was the background?',
+    _AppLanguage.german: 'Vorherige Tafel: Welche Hintergrundfarbe war es?',
+    _AppLanguage.ukrainian: 'Попереднє поле: яке було тло?',
+  },
+  'Pamięć robocza ma wygrać z tym, co widzisz w tej chwili.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Working memory should beat what you currently see.',
+        _AppLanguage.german:
+            'Das Arbeitsgedächtnis soll stärker sein als das, was du gerade siehst.',
+        _AppLanguage.ukrainian:
+            "Робоча пам'ять має переважити те, що ти бачиш у цю мить.",
+      },
+  'Czy poprzedni napis zgadzał się z kolorem czcionki?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Did the previous word match the font color?',
+    _AppLanguage.german: 'Passte das vorherige Wort zur Schriftfarbe?',
+    _AppLanguage.ukrainian: 'Чи збігалося попереднє слово з кольором шрифту?',
+  },
+  'Patrzysz teraz, ale odpowiadasz o relacji z poprzedniej planszy.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You are looking now, but answering about the previous board.',
+        _AppLanguage.german:
+            'Du schaust jetzt, antwortest aber über die vorherige Tafel.',
+        _AppLanguage.ukrainian:
+            'Ти дивишся зараз, але відповідаєш про попереднє поле.',
+      },
+  'Czy obecne tło jest takie samo jak poprzednie?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Is the current background the same as previous?',
+    _AppLanguage.german:
+        'Ist der aktuelle Hintergrund derselbe wie der vorherige?',
+    _AppLanguage.ukrainian: 'Чи теперішнє тло таке саме, як попереднє?',
+  },
+  'Porównaj bieżący obraz z tym, co zostało w pamięci.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Compare the current image with what remains in memory.',
+    _AppLanguage.german:
+        'Vergleiche das aktuelle Bild mit dem, was im Gedächtnis geblieben ist.',
+    _AppLanguage.ukrainian:
+        'Порівняй поточне зображення з тим, що лишилося в памʼяті.',
+  },
+  'Czy obecny kolor czcionki jest taki sam jak poprzednio?':
+      <_AppLanguage, String>{
+        _AppLanguage.english: 'Is the current font color the same as before?',
+        _AppLanguage.german:
+            'Ist die aktuelle Schriftfarbe dieselbe wie zuvor?',
+        _AppLanguage.ukrainian:
+            'Чи теперішній колір шрифту такий самий, як попередній?',
+      },
+  'Nie zgaduj. Porównaj aktualną czcionkę z poprzednią planszą.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Do not guess. Compare the current font with the previous board.',
+        _AppLanguage.german:
+            'Nicht raten. Vergleiche die aktuelle Schrift mit der vorherigen Tafel.',
+        _AppLanguage.ukrainian:
+            'Не вгадуй. Порівняй поточний шрифт із попереднім полем.',
+      },
+  'Jedna zasada, jeden tap, żadnych wahań.': <_AppLanguage, String>{
+    _AppLanguage.english: 'One rule, one tap, no hesitation.',
+    _AppLanguage.german: 'Eine Regel, ein Tap, kein Zögern.',
+    _AppLanguage.ukrainian: 'Одне правило, один тап, жодних вагань.',
+  },
+  'Trafienie. Szybko i czysto.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Hit. Fast and clean.',
+    _AppLanguage.german: 'Treffer. Schnell und sauber.',
+    _AppLanguage.ukrainian: 'Влучання. Швидко й чисто.',
+  },
+  'Fałszywy alarm. Nie dotykaj bodźców poza regułą.': <_AppLanguage, String>{
+    _AppLanguage.english: 'False alarm. Do not tap stimuli outside the rule.',
+    _AppLanguage.german:
+        'Fehlalarm. Berühre keine Reize außerhalb der aktuellen Regel.',
+    _AppLanguage.ukrainian:
+        'Хибна тривога. Не торкайся стимулів поза правилом.',
+  },
+  'Koniec': <_AppLanguage, String>{
+    _AppLanguage.english: 'End',
+    _AppLanguage.german: 'Ende',
+    _AppLanguage.ukrainian: 'Кінець',
+  },
+  'READY': <_AppLanguage, String>{
+    _AppLanguage.english: 'READY',
+    _AppLanguage.german: 'BEREIT',
+    _AppLanguage.ukrainian: 'ГОТОВО',
+  },
+  'TAP': <_AppLanguage, String>{
+    _AppLanguage.english: 'TAP',
+    _AppLanguage.german: 'TIPP',
+    _AppLanguage.ukrainian: 'ТАП',
+  },
+  'Zamknij': <_AppLanguage, String>{
+    _AppLanguage.english: 'Close',
+    _AppLanguage.german: 'Schließen',
+    _AppLanguage.ukrainian: 'Закрити',
+  },
+  'Uruchom serię i reaguj bez zawahania.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Start the sequence and react without hesitation.',
+    _AppLanguage.german: 'Starte die Sequenz und reagiere ohne Zögern.',
+    _AppLanguage.ukrainian: 'Запусти серію та реагуй без вагань.',
+  },
+  'Zm. za {seconds} s': <_AppLanguage, String>{
+    _AppLanguage.english: 'Chg in {seconds}s',
+    _AppLanguage.german: 'Wechsel in {seconds}s',
+    _AppLanguage.ukrainian: 'Зм. через {seconds} с',
+  },
+  'LICZBA': <_AppLanguage, String>{
+    _AppLanguage.english: 'NUMBER',
+    _AppLanguage.german: 'ZAHL',
+    _AppLanguage.ukrainian: 'ЧИСЛО',
+  },
+  'Aktualna zasada': <_AppLanguage, String>{
+    _AppLanguage.english: 'Current rule',
+    _AppLanguage.german: 'Aktuelle Regel',
+    _AppLanguage.ukrainian: 'Поточне правило',
+  },
+  'Nowa zasada: {rule}': <_AppLanguage, String>{
+    _AppLanguage.english: 'New rule: {rule}',
+    _AppLanguage.german: 'Neue Regel: {rule}',
+    _AppLanguage.ukrainian: 'Нове правило: {rule}',
+  },
+  'Pudło. Trafiaj od razu, gdy bodziec spełnia regułę.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Miss. Tap immediately when a stimulus matches the rule.',
+    _AppLanguage.german:
+        'Verfehlt. Tippe sofort, wenn ein Reiz die Regel erfüllt.',
+    _AppLanguage.ukrainian:
+        'Промах. Тапай одразу, коли стимул відповідає правилу.',
+  },
+  'Dobrze powstrzymane. Trzymaj filtr.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Good restraint. Keep the filter.',
+    _AppLanguage.german: 'Gut zurückgehalten. Halte den Filter.',
+    _AppLanguage.ukrainian: 'Добре стримано. Тримай фільтр.',
+  },
+  'Błędy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Errors',
+    _AppLanguage.german: 'Fehler',
+    _AppLanguage.ukrainian: 'Помилки',
+  },
+  'Śr. reakcja': <_AppLanguage, String>{
+    _AppLanguage.english: 'Avg. reaction',
+    _AppLanguage.german: 'Ø Reaktion',
+    _AppLanguage.ukrainian: 'Сер. реакція',
+  },
+  'Bodźce': <_AppLanguage, String>{
+    _AppLanguage.english: 'Stimuli',
+    _AppLanguage.german: 'Reize',
+    _AppLanguage.ukrainian: 'Стимули',
+  },
+  'Usunąć zapisany wynik?': <_AppLanguage, String>{
+    _AppLanguage.english: 'Delete saved result?',
+    _AppLanguage.german: 'Gespeichertes Ergebnis löschen?',
+    _AppLanguage.ukrainian: 'Видалити збережений результат?',
+  },
+  'To usunie zapis poziomu {level} z dnia {date} wraz z pozostałymi rundami z tego dnia dla tego poziomu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'This will delete level {level} record from {date} together with the remaining rounds from that day for this level.',
+        _AppLanguage.german:
+            'Dadurch wird der Level-{level}-Eintrag vom {date} zusammen mit den übrigen Runden dieses Tages für dieses Level gelöscht.',
+        _AppLanguage.ukrainian:
+            'Це видалить запис рівня {level} за {date} разом з іншими раундами цього дня для цього рівня.',
+      },
+  'Ładowanie zapisanych wyników...': <_AppLanguage, String>{
+    _AppLanguage.english: 'Loading saved results...',
+    _AppLanguage.german: 'Gespeicherte Ergebnisse werden geladen...',
+    _AppLanguage.ukrainian: 'Завантаження збережених результатів...',
+  },
+  'Dzisiaj nie ma jeszcze zapisanego rekordu.': <_AppLanguage, String>{
+    _AppLanguage.english: 'No saved record for today yet.',
+    _AppLanguage.german: 'Heute gibt es noch keinen gespeicherten Rekord.',
+    _AppLanguage.ukrainian: 'Сьогодні ще немає збереженого рекорду.',
+  },
+  'Dzisiaj: poziom {level} • skuteczność decyzji {accuracy}% • {summary}':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Today: level {level} • decision accuracy {accuracy}% • {summary}',
+        _AppLanguage.german:
+            'Heute: Level {level} • Entscheidungsgenauigkeit {accuracy}% • {summary}',
+        _AppLanguage.ukrainian:
+            'Сьогодні: рівень {level} • точність рішень {accuracy}% • {summary}',
+      },
+  'Dzisiaj zapisane poziomy: {levels}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Today saved levels: {levels}',
+    _AppLanguage.german: 'Heute gespeicherte Level: {levels}',
+    _AppLanguage.ukrainian: 'Сьогодні збережені рівні: {levels}',
+  },
+  'Najlepsze wyniki dnia': <_AppLanguage, String>{
+    _AppLanguage.english: 'Best results of the day',
+    _AppLanguage.german: 'Beste Ergebnisse des Tages',
+    _AppLanguage.ukrainian: 'Найкращі результати дня',
+  },
+  'Po pierwszej zakończonej rundzie rekord dnia zapisze się tutaj. Wyniki są rozdzielane osobno dla każdej daty i poziomu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'After the first finished round, the daily record will appear here. Results are separated by date and level.',
+        _AppLanguage.german:
+            'Nach der ersten abgeschlossenen Runde erscheint hier der Tagesrekord. Ergebnisse werden für jedes Datum und Level getrennt gespeichert.',
+        _AppLanguage.ukrainian:
+            'Після першого завершеного раунду рекорд дня збережеться тут. Результати зберігаються окремо для кожної дати й рівня.',
+      },
+  'Przytrzymaj kafelek poziomu, żeby usunąć zapis z tego dnia.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Long-press a level tile to delete the record from that day.',
+        _AppLanguage.german:
+            'Halte eine Level-Kachel gedrückt, um den Eintrag dieses Tages zu löschen.',
+        _AppLanguage.ukrainian:
+            'Утримуй картку рівня, щоб видалити запис за цей день.',
+      },
+  'Tapnij ekran tylko wtedy, gdy bodziec spełnia aktualną regułę. Skuteczność liczy też poprawne odpuszczenia.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Tap only when the stimulus matches the current rule. Accuracy also counts correct no-taps.',
+        _AppLanguage.german:
+            'Tippe nur, wenn der Reiz zur aktuellen Regel passt. Zur Genauigkeit gehören auch korrekte Nicht-Taps.',
+        _AppLanguage.ukrainian:
+            'Тапай лише тоді, коли стимул відповідає поточному правилу. У точність також зараховуються правильні пропуски.',
+      },
+  'Za chwilę rusza runda. Poczekaj na pierwszy bodziec i dopiero wtedy reaguj.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'The round starts in a moment. Wait for the first stimulus, then react.',
+        _AppLanguage.german:
+            'Die Runde startet gleich. Warte auf den ersten Reiz und reagiere dann.',
+        _AppLanguage.ukrainian:
+            'Раунд ось-ось почнеться. Дочекайся першого стимулу й лише тоді реагуй.',
+      },
+  'Wynik tej rundy został zapisany i zostanie po ponownym uruchomieniu aplikacji.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'This round result has been saved and will remain after app restart.',
+        _AppLanguage.german:
+            'Das Ergebnis dieser Runde wurde gespeichert und bleibt nach dem Neustart der App erhalten.',
+        _AppLanguage.ukrainian:
+            'Результат цього раунду збережено і він залишиться після перезапуску застосунку.',
+      },
+  'Reguła zmienia się co 12 sekund, a na wyższych levelach bodźce lecą szybciej.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'The rule changes every 12 seconds, and on higher levels stimuli appear faster.',
+        _AppLanguage.german:
+            'Die Regel wechselt alle 12 Sekunden, und auf höheren Levels kommen die Reize schneller.',
+        _AppLanguage.ukrainian:
+            'Правило змінюється кожні 12 секунд, а на вищих рівнях стимули зʼявляються швидше.',
+      },
+  'Klikaj tylko czerwone': <_AppLanguage, String>{
+    _AppLanguage.english: 'Tap red only',
+    _AppLanguage.german: 'Nur Rot tippen',
+    _AppLanguage.ukrainian: 'Тапай лише червоне',
+  },
+  'Nie klikaj niebieskiego': <_AppLanguage, String>{
+    _AppLanguage.english: 'Do not tap blue',
+    _AppLanguage.german: 'Blau nicht tippen',
+    _AppLanguage.ukrainian: 'Не тапай синє',
+  },
+  'Klikaj tylko trójkąty': <_AppLanguage, String>{
+    _AppLanguage.english: 'Tap triangles only',
+    _AppLanguage.german: 'Nur Dreiecke tippen',
+    _AppLanguage.ukrainian: 'Тапай лише трикутники',
+  },
+  'Nie klikaj kół': <_AppLanguage, String>{
+    _AppLanguage.english: 'Do not tap circles',
+    _AppLanguage.german: 'Kreise nicht tippen',
+    _AppLanguage.ukrainian: 'Не тапай кола',
+  },
+  'Klikaj tylko liczby parzyste': <_AppLanguage, String>{
+    _AppLanguage.english: 'Tap even numbers only',
+    _AppLanguage.german: 'Nur gerade Zahlen tippen',
+    _AppLanguage.ukrainian: 'Тапай лише парні числа',
+  },
+  'JAK ZAGRAĆ': <_AppLanguage, String>{
+    _AppLanguage.english: 'HOW TO PLAY',
+    _AppLanguage.german: 'SO SPIELST DU',
+    _AppLanguage.ukrainian: 'ЯК ГРАТИ',
+  },
+  'Pełny ekran, 2 minuty i zmiana zasad co 12 sekund.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Fullscreen, 2 minutes, and rule changes every 12 seconds.',
+    _AppLanguage.german:
+        'Vollbild, 2 Minuten und Regelwechsel alle 12 Sekunden.',
+    _AppLanguage.ukrainian:
+        'Повний екран, 2 хвилини та зміна правил кожні 12 с.',
+  },
+  'Tapnij start, a potem dotykaj ekranu tylko wtedy, gdy bodziec spełnia aktualną regułę.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Tap start, then tap the screen only when the stimulus matches the current rule.',
+        _AppLanguage.german:
+            'Tippe Start und berühre dann den Bildschirm nur, wenn der Reiz zur aktuellen Regel passt.',
+        _AppLanguage.ukrainian:
+            'Натисни старт, а потім торкайся екрана лише тоді, коли стимул відповідає поточному правилу.',
+      },
+  'Przykładowe reguły w rundzie': <_AppLanguage, String>{
+    _AppLanguage.english: 'Example round rules',
+    _AppLanguage.german: 'Beispielregeln der Runde',
+    _AppLanguage.ukrainian: 'Приклади правил у раунді',
+  },
+  'Wybierz poziom Podstawowa, Średnia albo Hard.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Choose Basic, Medium, or Hard level.',
+    _AppLanguage.german: 'Wähle Level Basis, Mittel oder Schwer.',
+    _AppLanguage.ukrainian: 'Обери рівень Базовий, Середній або Складний.',
+  },
+  'Po starcie sesja otworzy się od razu na całym ekranie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'After start, the session opens immediately in fullscreen.',
+        _AppLanguage.german:
+            'Nach dem Start öffnet sich die Session sofort im Vollbild.',
+        _AppLanguage.ukrainian:
+            'Після старту сесія одразу відкриється на весь екран.',
+      },
+  'KOŁO': <_AppLanguage, String>{
+    _AppLanguage.english: 'CIRCLE',
+    _AppLanguage.german: 'KREIS',
+    _AppLanguage.ukrainian: 'КОЛО',
+  },
+  'TRÓJKĄT': <_AppLanguage, String>{
+    _AppLanguage.english: 'TRIANGLE',
+    _AppLanguage.german: 'DREIECK',
+    _AppLanguage.ukrainian: 'ТРИКУТНИК',
+  },
+  'KWADRAT': <_AppLanguage, String>{
+    _AppLanguage.english: 'SQUARE',
+    _AppLanguage.german: 'QUADRAT',
+    _AppLanguage.ukrainian: 'КВАДРАТ',
+  },
+  'GWIAZDA': <_AppLanguage, String>{
+    _AppLanguage.english: 'STAR',
+    _AppLanguage.german: 'STERN',
+    _AppLanguage.ukrainian: 'ЗІРКА',
+  },
+  'Tutaj sprawdzisz, co zmienia się na kolejnych poziomach. Na ekranie startowym zostaje tylko wybór poziomu i przycisk startu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Here you can check what changes on each level. On the start screen you only keep level selection and the start button.',
+        _AppLanguage.german:
+            'Hier siehst du, was sich auf den nächsten Levels ändert. Auf dem Startbildschirm bleiben nur die Levelwahl und der Start-Button.',
+        _AppLanguage.ukrainian:
+            'Тут ти побачиш, що змінюється на наступних рівнях. На стартовому екрані залишаються лише вибір рівня і кнопка старту.',
+      },
+  'Wybrany poziom jest poziomem startowym. Po rundzie gra dalej może podnieść albo obniżyć trudność na podstawie wyniku.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'The selected level is your starting level. After the round, the game may increase or decrease difficulty based on performance.',
+        _AppLanguage.german:
+            'Das gewählte Level ist dein Startlevel. Nach der Runde kann das Spiel die Schwierigkeit je nach Ergebnis erhöhen oder senken.',
+        _AppLanguage.ukrainian:
+            'Обраний рівень є стартовим. Після раунду гра може підвищити або знизити складність залежно від результату.',
+      },
+  'Wybierz poziom 1-5. Pełny opis poziomów jest pod znakiem zapytania.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Choose level 1-5. Full level descriptions are under the question mark.',
+        _AppLanguage.german:
+            'Wähle Level 1-5. Die vollständige Levelbeschreibung findest du unter dem Fragezeichen.',
+        _AppLanguage.ukrainian:
+            'Обери рівень 1-5. Повний опис рівнів є під знаком питання.',
+      },
+  'Opis poziomów': <_AppLanguage, String>{
+    _AppLanguage.english: 'Level description',
+    _AppLanguage.german: 'Levelbeschreibung',
+    _AppLanguage.ukrainian: 'Опис рівнів',
+  },
+  'Poziomy są ułożone jak osobne ścieżki wejścia. Wybierasz poziom startowy, a gra dalej sama może podnieść albo obniżyć trudność.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Levels are arranged as separate entry paths. You choose a starting level, then the game can raise or lower difficulty on its own.',
+        _AppLanguage.german:
+            'Die Levels sind als getrennte Einstiegspfade aufgebaut. Du wählst ein Startlevel, danach kann das Spiel die Schwierigkeit selbst erhöhen oder senken.',
+        _AppLanguage.ukrainian:
+            'Рівні побудовані як окремі шляхи входу. Ти обираєш стартовий рівень, а далі гра може сама підвищувати або знижувати складність.',
+      },
+  '1. Czytaj zasadę': <_AppLanguage, String>{
+    _AppLanguage.english: '1. Read the rule',
+    _AppLanguage.german: '1. Regel lesen',
+    _AppLanguage.ukrainian: '1. Читай правило',
+  },
+  '2. Tapnij tylko zgodne': <_AppLanguage, String>{
+    _AppLanguage.english: '2. Tap only matching',
+    _AppLanguage.german: '2. Nur passende tippen',
+    _AppLanguage.ukrainian: '2. Тапай лише відповідне',
+  },
+  '3. Przełącz filtr po zmianie': <_AppLanguage, String>{
+    _AppLanguage.english: '3. Switch filter after change',
+    _AppLanguage.german: '3. Filter nach Wechsel umstellen',
+    _AppLanguage.ukrainian: '3. Перемикай фільтр після зміни',
+  },
+  'Tempo: {tempo} • Zmiana zasad: {rules}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Pace: {tempo} • Rule change: {rules}',
+    _AppLanguage.german: 'Tempo: {tempo} • Regelwechsel: {rules}',
+    _AppLanguage.ukrainian: 'Темп: {tempo} • Зміна правил: {rules}',
+  },
+  'Tempo {tempo} • Zasady {rules}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Pace {tempo} • Rules {rules}',
+    _AppLanguage.german: 'Tempo {tempo} • Regeln {rules}',
+    _AppLanguage.ukrainian: 'Темп {tempo} • Правила {rules}',
+  },
+  'Stabilność': <_AppLanguage, String>{
+    _AppLanguage.english: 'Stability',
+    _AppLanguage.german: 'Stabilität',
+    _AppLanguage.ukrainian: 'Стабільність',
+  },
+  'Płynność': <_AppLanguage, String>{
+    _AppLanguage.english: 'Fluency',
+    _AppLanguage.german: 'Flüssigkeit',
+    _AppLanguage.ukrainian: 'Плинність',
+  },
+  'Adaptacja': <_AppLanguage, String>{
+    _AppLanguage.english: 'Adaptation',
+    _AppLanguage.german: 'Anpassung',
+    _AppLanguage.ukrainian: 'Адаптація',
+  },
+  'Przeciążenie': <_AppLanguage, String>{
+    _AppLanguage.english: 'Overload',
+    _AppLanguage.german: 'Überlastung',
+    _AppLanguage.ukrainian: 'Перевантаження',
+  },
+  'Mastery': <_AppLanguage, String>{
+    _AppLanguage.english: 'Mastery',
+    _AppLanguage.german: 'Meisterschaft',
+    _AppLanguage.ukrainian: 'Майстерність',
+  },
+  'Nauczyć mózg zasad, kontroli impulsu i podstawowej reakcji.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Teach the brain rules, impulse control, and basic reaction.',
+        _AppLanguage.german:
+            'Dem Gehirn Regeln, Impulskontrolle und Grundreaktion beibringen.',
+        _AppLanguage.ukrainian:
+            'Навчити мозок правилам, контролю імпульсу та базовій реакції.',
+      },
+  'Wejść w rytm i pierwsze przyspieszenie bez gubienia reguły.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Enter rhythm and first acceleration without losing the rule.',
+        _AppLanguage.german:
+            'In den Rhythmus und die erste Beschleunigung kommen, ohne die Regel zu verlieren.',
+        _AppLanguage.ukrainian:
+            'Увійти в ритм і перше прискорення без втрати правила.',
+      },
+  'Szybko przełączać się między regułami i utrzymać kontekst.':
+      <_AppLanguage, String>{
+        _AppLanguage.english: 'Switch quickly between rules and keep context.',
+        _AppLanguage.german:
+            'Schnell zwischen Regeln wechseln und den Kontext halten.',
+        _AppLanguage.ukrainian:
+            'Швидко перемикатися між правилами й утримувати контекст.',
+      },
+  'Wejść w granicę możliwości i utrzymać decyzję bez namysłu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Push to the limit and keep decisions without overthinking.',
+        _AppLanguage.german:
+            'An die Grenze gehen und Entscheidungen ohne Grübeln halten.',
+        _AppLanguage.ukrainian:
+            'Вийти на межу можливостей і тримати рішення без зайвих роздумів.',
+      },
+  'Osiągnąć automatyczną wysoką wydajność bez przeciążenia systemu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Reach automatic high performance without overloading the system.',
+        _AppLanguage.german:
+            'Automatisch hohe Leistung erreichen, ohne das System zu überlasten.',
+        _AppLanguage.ukrainian:
+            'Досягти автоматично високої продуктивності без перевантаження системи.',
+      },
+  'Zaczynasz od fundamentu i odblokowujesz kolejne poziomy wynikiem.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You start from the foundation and unlock next levels with performance.',
+        _AppLanguage.german:
+            'Du startest mit dem Fundament und schaltest die nächsten Levels durch Leistung frei.',
+        _AppLanguage.ukrainian:
+            'Ти починаєш з фундаменту й відкриваєш наступні рівні результатом.',
+      },
+  'Aktualny poziom: {levelLabel} • {title}.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Current level: {levelLabel} • {title}.',
+    _AppLanguage.german: 'Aktuelles Level: {levelLabel} • {title}.',
+    _AppLanguage.ukrainian: 'Поточний рівень: {levelLabel} • {title}.',
+  },
+  'Awans na {levelLabel} • {title}.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Promotion to {levelLabel} • {title}.',
+    _AppLanguage.german: 'Aufstieg auf {levelLabel} • {title}.',
+    _AppLanguage.ukrainian: 'Підвищення до {levelLabel} • {title}.',
+  },
+  'Powrót do {levelLabel} • {title}, żeby ustabilizować formę.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Return to {levelLabel} • {title} to stabilize form.',
+        _AppLanguage.german:
+            'Zurück auf {levelLabel} • {title}, um die Form zu stabilisieren.',
+        _AppLanguage.ukrainian:
+            'Повернення до {levelLabel} • {title}, щоб стабілізувати форму.',
+      },
+  'Trzymasz {levelLabel} • {title}.': <_AppLanguage, String>{
+    _AppLanguage.english: 'You hold {levelLabel} • {title}.',
+    _AppLanguage.german: 'Du hältst {levelLabel} • {title}.',
+    _AppLanguage.ukrainian: 'Ти тримаєш {levelLabel} • {title}.',
+  },
+  'Wybrany poziom startowy: {levelLabel} • {title}.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Selected start level: {levelLabel} • {title}.',
+    _AppLanguage.german: 'Gewähltes Startlevel: {levelLabel} • {title}.',
+    _AppLanguage.ukrainian: 'Обраний стартовий рівень: {levelLabel} • {title}.',
+  },
+  'Sprint Czytania': <_AppLanguage, String>{
+    _AppLanguage.english: 'Reading Sprint',
+    _AppLanguage.german: 'Lesesprint',
+    _AppLanguage.ukrainian: 'Швидке Читання',
+    _AppLanguage.russian: 'Спринт Чтения',
+  },
+  'Poziom 1': <_AppLanguage, String>{
+    _AppLanguage.english: 'Level 1',
+    _AppLanguage.german: 'Level 1',
+    _AppLanguage.ukrainian: 'Рівень 1',
+  },
+  'Poziom 2': <_AppLanguage, String>{
+    _AppLanguage.english: 'Level 2',
+    _AppLanguage.german: 'Level 2',
+    _AppLanguage.ukrainian: 'Рівень 2',
+  },
+  'Poziom 3': <_AppLanguage, String>{
+    _AppLanguage.english: 'Level 3',
+    _AppLanguage.german: 'Level 3',
+    _AppLanguage.ukrainian: 'Рівень 3',
+  },
+  'Poziom 4': <_AppLanguage, String>{
+    _AppLanguage.english: 'Level 4',
+    _AppLanguage.german: 'Level 4',
+    _AppLanguage.ukrainian: 'Рівень 4',
+  },
+  'Poziom 5': <_AppLanguage, String>{
+    _AppLanguage.english: 'Level 5',
+    _AppLanguage.german: 'Level 5',
+    _AppLanguage.ukrainian: 'Рівень 5',
+  },
+  'Drabina Pamięci': <_AppLanguage, String>{
+    _AppLanguage.english: 'Memory Ladder',
+    _AppLanguage.german: 'Gedächtnisleiter',
+    _AppLanguage.ukrainian: "Драбина Пам'яті",
+    _AppLanguage.russian: 'Лестница Памяти',
+  },
+  'Sejf cyfr ∞': <_AppLanguage, String>{
+    _AppLanguage.english: 'Digit Vault ∞',
+    _AppLanguage.german: 'Ziffern-Tresor ∞',
+    _AppLanguage.ukrainian: 'Сейф Цифр ∞',
+    _AppLanguage.russian: 'Сейф Цифр ∞',
+  },
+  'fiksacja': <_AppLanguage, String>{
+    _AppLanguage.english: 'fixation',
+    _AppLanguage.german: 'Fixierung',
+    _AppLanguage.ukrainian: 'фіксація',
+    _AppLanguage.russian: 'фиксация',
+  },
+  'cisza': <_AppLanguage, String>{
+    _AppLanguage.english: 'silence',
+    _AppLanguage.german: 'Stille',
+    _AppLanguage.ukrainian: 'тиша',
+    _AppLanguage.russian: 'тишина',
+  },
+  'uważność': <_AppLanguage, String>{
+    _AppLanguage.english: 'mindfulness',
+    _AppLanguage.german: 'Achtsamkeit',
+    _AppLanguage.ukrainian: 'уважність',
+    _AppLanguage.russian: 'осознанность',
+  },
+  'uwaga': <_AppLanguage, String>{
+    _AppLanguage.english: 'attention',
+    _AppLanguage.german: 'Aufmerksamkeit',
+    _AppLanguage.ukrainian: 'увага',
+    _AppLanguage.russian: 'внимание',
+  },
+  'filtr': <_AppLanguage, String>{
+    _AppLanguage.english: 'filter',
+    _AppLanguage.german: 'Filter',
+    _AppLanguage.ukrainian: 'фільтр',
+    _AppLanguage.russian: 'фильтр',
+  },
+  'pamięć': <_AppLanguage, String>{
+    _AppLanguage.english: 'memory',
+    _AppLanguage.german: 'Gedächtnis',
+    _AppLanguage.ukrainian: "пам'ять",
+    _AppLanguage.russian: 'память',
+  },
+  'Aktywny': <_AppLanguage, String>{
+    _AppLanguage.english: 'Active',
+    _AppLanguage.german: 'Aktiv',
+    _AppLanguage.ukrainian: 'Активний',
+    _AppLanguage.russian: 'Активный',
+  },
+  'decyzja': <_AppLanguage, String>{
+    _AppLanguage.english: 'decision',
+    _AppLanguage.german: 'Entscheidung',
+    _AppLanguage.ukrainian: 'рішення',
+    _AppLanguage.russian: 'решение',
+  },
+  'tempo': <_AppLanguage, String>{
+    _AppLanguage.english: 'tempo',
+    _AppLanguage.german: 'Tempo',
+    _AppLanguage.ukrainian: 'темп',
+    _AppLanguage.russian: 'темп',
+  },
+  'flow': <_AppLanguage, String>{
+    _AppLanguage.english: 'flow',
+    _AppLanguage.german: 'Flow',
+    _AppLanguage.ukrainian: 'потік',
+    _AppLanguage.russian: 'поток',
+  },
+  'rytm': <_AppLanguage, String>{
+    _AppLanguage.english: 'rhythm',
+    _AppLanguage.german: 'Rhythmus',
+    _AppLanguage.ukrainian: 'ритм',
+    _AppLanguage.russian: 'ритм',
+  },
+  'haptyka': <_AppLanguage, String>{
+    _AppLanguage.english: 'haptics',
+    _AppLanguage.german: 'Haptik',
+    _AppLanguage.ukrainian: 'гаптика',
+    _AppLanguage.russian: 'гаптика',
+  },
+  'czytanie': <_AppLanguage, String>{
+    _AppLanguage.english: 'reading',
+    _AppLanguage.german: 'Lesen',
+    _AppLanguage.ukrainian: 'читання',
+    _AppLanguage.russian: 'чтение',
+  },
+  'nauka': <_AppLanguage, String>{
+    _AppLanguage.english: 'study',
+    _AppLanguage.german: 'Lernen',
+    _AppLanguage.ukrainian: 'навчання',
+    _AppLanguage.russian: 'обучение',
+  },
+  'kolejność': <_AppLanguage, String>{
+    _AppLanguage.english: 'order',
+    _AppLanguage.german: 'Reihenfolge',
+    _AppLanguage.ukrainian: 'послідовність',
+    _AppLanguage.russian: 'последовательность',
+  },
+  'precyzja': <_AppLanguage, String>{
+    _AppLanguage.english: 'precision',
+    _AppLanguage.german: 'Präzision',
+    _AppLanguage.ukrainian: 'точність',
+    _AppLanguage.russian: 'точность',
+  },
+  'mnemotechnika': <_AppLanguage, String>{
+    _AppLanguage.english: 'mnemonics',
+    _AppLanguage.german: 'Mnemotechnik',
+    _AppLanguage.ukrainian: 'мнемоніка',
+    _AppLanguage.russian: 'мнемоника',
+  },
+  'cyfry': <_AppLanguage, String>{
+    _AppLanguage.english: 'digits',
+    _AppLanguage.german: 'Ziffern',
+    _AppLanguage.ukrainian: 'цифри',
+    _AppLanguage.russian: 'цифры',
+  },
+  'skojarzenia': <_AppLanguage, String>{
+    _AppLanguage.english: 'associations',
+    _AppLanguage.german: 'Assoziationen',
+    _AppLanguage.ukrainian: 'асоціації',
+    _AppLanguage.russian: 'ассоциации',
+  },
+  'reakcja': <_AppLanguage, String>{
+    _AppLanguage.english: 'reaction',
+    _AppLanguage.german: 'Reaktion',
+    _AppLanguage.ukrainian: 'реакція',
+    _AppLanguage.russian: 'реакция',
+  },
+  'ruch': <_AppLanguage, String>{
+    _AppLanguage.english: 'movement',
+    _AppLanguage.german: 'Bewegung',
+    _AppLanguage.ukrainian: 'рух',
+    _AppLanguage.russian: 'движение',
+  },
+  'Język': <_AppLanguage, String>{
+    _AppLanguage.english: 'Language',
+    _AppLanguage.german: 'Sprache',
+    _AppLanguage.ukrainian: 'Мова',
+    _AppLanguage.russian: 'Язык',
+  },
+  'Tarcza pomysłów': <_AppLanguage, String>{
+    _AppLanguage.english: 'Idea shield',
+    _AppLanguage.german: 'Ideen-Schild',
+    _AppLanguage.ukrainian: 'Щит ідей',
+    _AppLanguage.russian: 'Щит идей',
+  },
+  'Tryb jasny': <_AppLanguage, String>{
+    _AppLanguage.english: 'Light mode',
+    _AppLanguage.german: 'Heller Modus',
+    _AppLanguage.ukrainian: 'Світлий режим',
+    _AppLanguage.russian: 'Светлый режим',
+  },
+  'Ta gra jest z myślą o tobie': <_AppLanguage, String>{
+    _AppLanguage.english: 'This game was made for you',
+    _AppLanguage.german: 'Dieses Spiel ist fur dich gemacht',
+    _AppLanguage.ukrainian: 'Ця гра створена для тебе',
+    _AppLanguage.russian: 'Эта игра сделана для тебя',
+  },
+  'Jesteś Najlepszy': <_AppLanguage, String>{
+    _AppLanguage.english: 'You are the best',
+    _AppLanguage.german: 'Du bist der Beste',
+    _AppLanguage.ukrainian: 'Ти найкращий',
+    _AppLanguage.russian: 'Ты лучший',
+  },
+  'To, co czuję jako zatrzymanie, to moment, w którym mózg buduje połączenia — a flow pojawi się, gdy staną się automatyczne.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'What feels like stopping is the moment when the brain builds connections - and flow appears when they become automatic.',
+        _AppLanguage.german:
+            'Was wie ein Anhalten wirkt, ist der Moment, in dem das Gehirn Verbindungen aufbaut - und Flow erscheint, wenn sie automatisch werden.',
+        _AppLanguage.ukrainian:
+            'Те, що здається зупинкою, - це момент, коли мозок будує звʼязки, а потік зʼявляється, коли вони стають автоматичними.',
+        _AppLanguage.russian:
+            'То, что ощущается как остановка, - это момент, когда мозг строит связи, а поток появляется, когда они становятся автоматическими.',
+      },
+  'Dzisiejszy progres': <_AppLanguage, String>{
+    _AppLanguage.english: "Today's progress",
+    _AppLanguage.german: 'Heutiger Fortschritt',
+    _AppLanguage.ukrainian: 'Прогрес за сьогодні',
+    _AppLanguage.russian: 'Прогресс за сегодня',
+  },
+  'Aktywny cykl {cycle}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Active cycle {cycle}',
+    _AppLanguage.german: 'Aktiver Zyklus {cycle}',
+    _AppLanguage.ukrainian: 'Активний цикл {cycle}',
+    _AppLanguage.russian: 'Активный цикл {cycle}',
+  },
+  'Progres ukończono': <_AppLanguage, String>{
+    _AppLanguage.english: 'Progress completed',
+    _AppLanguage.german: 'Fortschritt abgeschlossen',
+    _AppLanguage.ukrainian: 'Прогрес завершено',
+    _AppLanguage.russian: 'Прогресс завершен',
+  },
+  '{done} z {total} ćwiczeń oznaczone jako wykonane': <_AppLanguage, String>{
+    _AppLanguage.english: '{done} of {total} exercises marked as completed',
+    _AppLanguage.german:
+        '{done} von {total} Ubungen als abgeschlossen markiert',
+    _AppLanguage.ukrainian: '{done} з {total} вправ позначено як виконані',
+    _AppLanguage.russian:
+        '{done} из {total} упражнений отмечены как выполненные',
+  },
+  'Dzisiaj ukończono już {count} {word}.': <_AppLanguage, String>{
+    _AppLanguage.english: '{count} {word} completed today.',
+    _AppLanguage.german: 'Heute bereits {count} {word} abgeschlossen.',
+    _AppLanguage.ukrainian: 'Сьогодні вже завершено {count} {word}.',
+    _AppLanguage.russian: 'Сегодня уже завершено {count} {word}.',
+  },
+  'Rozpocznij kolejny progres': <_AppLanguage, String>{
+    _AppLanguage.english: 'Start next progress cycle',
+    _AppLanguage.german: 'Nächsten Fortschritt starten',
+    _AppLanguage.ukrainian: 'Почати наступний прогрес',
+    _AppLanguage.russian: 'Начать следующий прогресс',
+  },
+  'Brak zapisów.': <_AppLanguage, String>{
+    _AppLanguage.english: 'No entries.',
+    _AppLanguage.german: 'Keine Einträge.',
+    _AppLanguage.ukrainian: 'Немає записів.',
+    _AppLanguage.russian: 'Нет записей.',
+  },
+  '{date} • {count} {entries}': <_AppLanguage, String>{
+    _AppLanguage.english: '{date} • {count} {entries}',
+    _AppLanguage.german: '{date} • {count} {entries}',
+    _AppLanguage.ukrainian: '{date} • {count} {entries}',
+    _AppLanguage.russian: '{date} • {count} {entries}',
+  },
+  'Poprzedni miesiąc': <_AppLanguage, String>{
+    _AppLanguage.english: 'Previous month',
+    _AppLanguage.german: 'Vorheriger Monat',
+    _AppLanguage.ukrainian: 'Попередній місяць',
+    _AppLanguage.russian: 'Предыдущий месяц',
+  },
+  'Następny miesiąc': <_AppLanguage, String>{
+    _AppLanguage.english: 'Next month',
+    _AppLanguage.german: 'Nächster Monat',
+    _AppLanguage.ukrainian: 'Наступний місяць',
+    _AppLanguage.russian: 'Следующий месяц',
+  },
+  'Brak zapisów dla tego dnia.': <_AppLanguage, String>{
+    _AppLanguage.english: 'No entries for this day.',
+    _AppLanguage.german: 'Keine Einträge für diesen Tag.',
+    _AppLanguage.ukrainian: 'Немає записів за цей день.',
+    _AppLanguage.russian: 'Нет записей за этот день.',
+  },
+  'Ten dzień nie ma jeszcze zapisanych aktywności.': <_AppLanguage, String>{
+    _AppLanguage.english: 'No activities have been saved for this day yet.',
+    _AppLanguage.german:
+        'Für diesen Tag wurden noch keine Aktivitäten gespeichert.',
+    _AppLanguage.ukrainian: 'Для цього дня ще не збережено жодної активності.',
+    _AppLanguage.russian: 'Для этого дня еще не сохранено ни одной активности.',
+  },
+  'Zapisano o {time}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Saved at {time}',
+    _AppLanguage.german: 'Gespeichert um {time}',
+    _AppLanguage.ukrainian: 'Збережено о {time}',
+    _AppLanguage.russian: 'Сохранено в {time}',
+  },
+  'Oferty subskrypcji': <_AppLanguage, String>{
+    _AppLanguage.english: 'Subscription offers',
+    _AppLanguage.german: 'Abo-Angebote',
+    _AppLanguage.ukrainian: 'Пропозиції підписки',
+    _AppLanguage.russian: 'Варианты подписки',
+  },
+  'Notatnik Premium': <_AppLanguage, String>{
+    _AppLanguage.english: 'Premium Notebook',
+    _AppLanguage.german: 'Premium-Notizbuch',
+    _AppLanguage.ukrainian: 'Преміум-нотатник',
+    _AppLanguage.russian: 'Премиум-блокнот',
+  },
+  'Prosty katalog notatkowy dla Twoich przyszłych planów':
+      <_AppLanguage, String>{
+        _AppLanguage.english: 'Simple notebook catalog for your future plans',
+        _AppLanguage.german:
+            'Einfacher Notizkatalog fur deine zukunftigen Plane',
+        _AppLanguage.ukrainian:
+            'Простий каталог нотаток для твоїх майбутніх планів',
+        _AppLanguage.russian:
+            'Простой каталог заметок для твоих будущих планов',
+      },
+  'Instrukcja: Kliknij nazwę notatnika u góry, aby od razu dodać nową kategorię.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Instruction: Tap the notebook title at the top to add a new category immediately.',
+        _AppLanguage.german:
+            'Anleitung: Tippe oben auf den Notizbuchtitel, um sofort eine neue Kategorie hinzuzufugen.',
+        _AppLanguage.ukrainian:
+            'Інструкція: Натисни на назву нотатника вгорі, щоб одразу додати нову категорію.',
+        _AppLanguage.russian:
+            'Инструкция: Нажми на название блокнота сверху, чтобы сразу добавить новую категорию.',
+      },
+  'Ustaw po swojemu': <_AppLanguage, String>{
+    _AppLanguage.english: 'Set your own',
+    _AppLanguage.german: 'Eigene festlegen',
+    _AppLanguage.ukrainian: 'Налаштуй по-своєму',
+    _AppLanguage.russian: 'Настрой под себя',
+  },
+  'Zapisz własne słowa': <_AppLanguage, String>{
+    _AppLanguage.english: 'Save your own words',
+    _AppLanguage.german: 'Eigene Wörter speichern',
+    _AppLanguage.ukrainian: 'Зберегти власні слова',
+    _AppLanguage.russian: 'Сохранить свои слова',
+  },
+  'Zapisano własne skojarzenia.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Your custom associations were saved.',
+    _AppLanguage.german: 'Deine eigenen Assoziationen wurden gespeichert.',
+    _AppLanguage.ukrainian: 'Твої власні асоціації збережено.',
+    _AppLanguage.russian: 'Твои собственные ассоциации сохранены.',
+  },
+  'To miejsce na Twoje kategorie i notatki. Po odblokowaniu możesz wygodnie porządkować pomysły i szybko do nich wracać.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'This is your space for categories and notes. After unlocking, you can organize ideas comfortably and return to them quickly.',
+        _AppLanguage.german:
+            'Das ist dein Bereich für Kategorien und Notizen. Nach dem Freischalten kannst du Ideen bequem ordnen und schnell zu ihnen zurückkehren.',
+        _AppLanguage.ukrainian:
+            'Це місце для твоїх категорій і нотаток. Після розблокування ти зможеш зручно впорядковувати ідеї та швидко до них повертатися.',
+        _AppLanguage.russian:
+            'Это место для твоих категорий и заметок. После разблокировки ты сможешь удобно упорядочивать идеи и быстро к ним возвращаться.',
+      },
+  'Kategorie': <_AppLanguage, String>{
+    _AppLanguage.english: 'Categories',
+    _AppLanguage.german: 'Kategorien',
+    _AppLanguage.ukrainian: 'Категорії',
+    _AppLanguage.russian: 'Категории',
+  },
+  'Ułóż tematy pod siebie i trzymaj porządek.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Arrange topics your way and keep things organized.',
+    _AppLanguage.german: 'Ordne Themen nach deinem Stil und halte Ordnung.',
+    _AppLanguage.ukrainian: 'Налаштуй теми під себе і тримай порядок.',
+    _AppLanguage.russian: 'Настрой темы под себя и поддерживай порядок.',
+  },
+  'Notatki': <_AppLanguage, String>{
+    _AppLanguage.english: 'Notes',
+    _AppLanguage.german: 'Notizen',
+    _AppLanguage.ukrainian: 'Нотатки',
+    _AppLanguage.russian: 'Заметки',
+  },
+  'Zapisuj pomysły, checklisty i szybkie myśli w jednym miejscu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Save ideas, checklists and quick thoughts in one place.',
+        _AppLanguage.german:
+            'Speichere Ideen, Checklisten und kurze Gedanken an einem Ort.',
+        _AppLanguage.ukrainian:
+            'Зберігай ідеї, чеклісти та швидкі думки в одному місці.',
+        _AppLanguage.russian:
+            'Сохраняй идеи, чек-листы и быстрые мысли в одном месте.',
+      },
+  'Koszt odblokowania: 25 zł (jednorazowo)': <_AppLanguage, String>{
+    _AppLanguage.english: 'Unlock cost: 25 PLN (one-time)',
+    _AppLanguage.german: 'Freischaltkosten: 25 PLN (einmalig)',
+    _AppLanguage.ukrainian: 'Вартість розблокування: 25 PLN (одноразово)',
+    _AppLanguage.russian: 'Стоимость разблокировки: 25 PLN (единоразово)',
+  },
+  'Wejdź za free (za darmo)': <_AppLanguage, String>{
+    _AppLanguage.english: 'Enter for free',
+    _AppLanguage.german: 'Kostenlos betreten',
+    _AppLanguage.ukrainian: 'Увійти безкоштовно',
+    _AppLanguage.russian: 'Войти бесплатно',
+  },
+  'Notatnik Premium odblokowany za darmo.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Premium Notebook unlocked for free.',
+    _AppLanguage.german: 'Premium-Notizbuch kostenlos freigeschaltet.',
+    _AppLanguage.ukrainian: 'Преміум-нотатник розблоковано безкоштовно.',
+    _AppLanguage.russian: 'Премиум-блокнот разблокирован бесплатно.',
+  },
+  'Sejf cyfr ∞ odblokowany za darmo.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Number Vault ∞ unlocked for free.',
+    _AppLanguage.german: 'Zahlentresor ∞ kostenlos freigeschaltet.',
+    _AppLanguage.ukrainian: 'Сейф цифр ∞ розблоковано безкоштовно.',
+    _AppLanguage.russian: 'Сейф цифр ∞ разблокирован бесплатно.',
+  },
+  'Zapłać 25 zł': <_AppLanguage, String>{
+    _AppLanguage.english: 'Pay 25 PLN',
+    _AppLanguage.german: '25 PLN bezahlen',
+    _AppLanguage.ukrainian: 'Сплатити 25 PLN',
+    _AppLanguage.russian: 'Оплатить 25 PLN',
+  },
+  'Zakup 25 zł nie powiódł się.': <_AppLanguage, String>{
+    _AppLanguage.english: 'The 25 PLN purchase failed.',
+    _AppLanguage.german: 'Der Kauf für 25 PLN ist fehlgeschlagen.',
+    _AppLanguage.ukrainian: 'Покупка на 25 PLN не вдалася.',
+    _AppLanguage.russian: 'Покупка на 25 PLN не удалась.',
+  },
+  'Zakup 50 zł nie powiódł się.': <_AppLanguage, String>{
+    _AppLanguage.english: 'The 50 PLN purchase failed.',
+    _AppLanguage.german: 'Der Kauf für 50 PLN ist fehlgeschlagen.',
+    _AppLanguage.ukrainian: 'Покупка на 50 PLN не вдалася.',
+    _AppLanguage.russian: 'Покупка на 50 PLN не удалась.',
+  },
+  'Zakup premium nie powiódł się.': <_AppLanguage, String>{
+    _AppLanguage.english: 'The premium purchase failed.',
+    _AppLanguage.german: 'Der Premium-Kauf ist fehlgeschlagen.',
+    _AppLanguage.ukrainian: 'Преміум-покупка не вдалася.',
+    _AppLanguage.russian: 'Премиум-покупка не удалась.',
+  },
+  'Zakup nie powiódł się.': <_AppLanguage, String>{
+    _AppLanguage.english: 'The purchase failed.',
+    _AppLanguage.german: 'Der Kauf ist fehlgeschlagen.',
+    _AppLanguage.ukrainian: 'Покупка не вдалася.',
+    _AppLanguage.russian: 'Покупка не удалась.',
+  },
+  'Błąd sklepu: {error}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Store error: {error}',
+    _AppLanguage.german: 'Store-Fehler: {error}',
+    _AppLanguage.ukrainian: 'Помилка магазину: {error}',
+    _AppLanguage.russian: 'Ошибка магазина: {error}',
+  },
+  'Nie udało się rozpocząć zakupu.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Could not start the purchase.',
+    _AppLanguage.german: 'Der Kauf konnte nicht gestartet werden.',
+    _AppLanguage.ukrainian: 'Не вдалося розпочати покупку.',
+    _AppLanguage.russian: 'Не удалось начать покупку.',
+  },
+  'Brak potwierdzenia zakupu. Sprawdź zakupy i spróbuj ponownie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'No purchase confirmation. Check purchases and try again.',
+        _AppLanguage.german:
+            'Keine Kaufbestätigung. Prüfe Käufe und versuche es erneut.',
+        _AppLanguage.ukrainian:
+            'Немає підтвердження покупки. Перевір покупки та спробуй ще раз.',
+        _AppLanguage.russian:
+            'Нет подтверждения покупки. Проверь покупки и попробуй снова.',
+      },
+  'Brak potwierdzenia zakupu z Google Play. Spróbuj ponownie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'No purchase confirmation from Google Play. Try again.',
+        _AppLanguage.german:
+            'Keine Kaufbestätigung von Google Play. Versuche es erneut.',
+        _AppLanguage.ukrainian:
+            'Немає підтвердження покупки від Google Play. Спробуй ще раз.',
+        _AppLanguage.russian:
+            'Нет подтверждения покупки от Google Play. Попробуйте снова.',
+      },
+  'Zakupy Premium działają na Androidzie i iOS.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Premium purchases work on Android and iOS.',
+    _AppLanguage.german: 'Premium-Käufe funktionieren auf Android und iOS.',
+    _AppLanguage.ukrainian: 'Преміум-покупки працюють на Android та iOS.',
+    _AppLanguage.russian: 'Премиум-покупки работают на Android и iOS.',
+  },
+  'Płatność działa na Androidzie przez Google Play.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Payment works on Android via Google Play.',
+    _AppLanguage.german:
+        'Die Zahlung funktioniert auf Android über Google Play.',
+    _AppLanguage.ukrainian: 'Оплата працює на Android через Google Play.',
+    _AppLanguage.russian: 'Оплата работает на Android через Google Play.',
+  },
+  'Nieznany plan premium.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Unknown premium plan.',
+    _AppLanguage.german: 'Unbekannter Premium-Plan.',
+    _AppLanguage.ukrainian: 'Невідомий преміум-план.',
+    _AppLanguage.russian: 'Неизвестный премиум-план.',
+  },
+  'Sklep jest chwilowo niedostępny. Spróbuj ponownie za chwilę.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Store is temporarily unavailable. Try again soon.',
+        _AppLanguage.german:
+            'Der Store ist vorübergehend nicht verfügbar. Bitte versuche es gleich erneut.',
+        _AppLanguage.ukrainian:
+            'Магазин тимчасово недоступний. Спробуй ще раз трохи пізніше.',
+        _AppLanguage.russian:
+            'Магазин временно недоступен. Попробуйте снова чуть позже.',
+      },
+  'Sklep Google Play jest chwilowo niedostępny.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Google Play Store is temporarily unavailable.',
+    _AppLanguage.german:
+        'Der Google Play Store ist vorübergehend nicht verfügbar.',
+    _AppLanguage.ukrainian: 'Магазин Google Play тимчасово недоступний.',
+    _AppLanguage.russian: 'Google Play временно недоступен.',
+  },
+  'Nie znaleziono produktu w Google Play. Sprawdź identyfikator produktu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Product not found in Google Play. Check the product ID.',
+        _AppLanguage.german:
+            'Produkt in Google Play nicht gefunden. Prüfe die Produkt-ID.',
+        _AppLanguage.ukrainian:
+            'Продукт не знайдено в Google Play. Перевір ідентифікатор продукту.',
+        _AppLanguage.russian:
+            'Продукт не найден в Google Play. Проверьте идентификатор продукта.',
+      },
+  'Nie znaleziono produktu 50 zł w Google Play Console.': <_AppLanguage, String>{
+    _AppLanguage.english: '50 PLN product not found in Google Play Console.',
+    _AppLanguage.german:
+        'Das 50-PLN-Produkt wurde in der Google Play Console nicht gefunden.',
+    _AppLanguage.ukrainian: 'Продукт 50 PLN не знайдено в Google Play Console.',
+    _AppLanguage.russian: 'Продукт 50 PLN не найден в Google Play Console.',
+  },
+  'Nie znaleziono produktu 25 zł w Google Play Console.': <_AppLanguage, String>{
+    _AppLanguage.english: '25 PLN product not found in Google Play Console.',
+    _AppLanguage.german:
+        'Das 25-PLN-Produkt wurde in der Google Play Console nicht gefunden.',
+    _AppLanguage.ukrainian: 'Продукт 25 PLN не знайдено в Google Play Console.',
+    _AppLanguage.russian: 'Продукт 25 PLN не найден в Google Play Console.',
+  },
+  'Notatnik Premium odblokowany po potwierdzeniu zakupu 25 zł w Google Play.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Premium Notebook unlocked after confirming the 25 PLN purchase in Google Play.',
+        _AppLanguage.german:
+            'Premium-Notizbuch nach Bestätigung des Kaufs für 25 PLN in Google Play freigeschaltet.',
+        _AppLanguage.ukrainian:
+            'Преміум-нотатник розблоковано після підтвердження покупки 25 PLN у Google Play.',
+        _AppLanguage.russian:
+            'Премиум-блокнот разблокирован после подтверждения покупки 25 PLN в Google Play.',
+      },
+  'Sejf cyfr ∞ odblokowany po potwierdzeniu zakupu 50 zł w Google Play.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Number Vault ∞ unlocked after confirming the 50 PLN purchase in Google Play.',
+        _AppLanguage.german:
+            'Zahlentresor ∞ nach Bestätigung des Kaufs für 50 PLN in Google Play freigeschaltet.',
+        _AppLanguage.ukrainian:
+            'Сейф цифр ∞ розблоковано після підтвердження покупки 50 PLN у Google Play.',
+        _AppLanguage.russian:
+            'Сейф цифр ∞ разблокирован после подтверждения покупки 50 PLN в Google Play.',
+      },
+  'Możesz odblokować Notatnik Premium później.': <_AppLanguage, String>{
+    _AppLanguage.english: 'You can unlock Premium Notebook later.',
+    _AppLanguage.german: 'Du kannst das Premium-Notizbuch später freischalten.',
+    _AppLanguage.ukrainian: 'Ти можеш розблокувати Преміум-нотатник пізніше.',
+    _AppLanguage.russian: 'Вы можете разблокировать Премиум-блокнот позже.',
+  },
+  'Aby otworzyć tę sekcję, wymagana jest jednorazowa opłata 50 zł.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'To open this section, a one-time fee of 50 PLN is required.',
+        _AppLanguage.german:
+            'Um diesen Bereich zu öffnen, ist eine einmalige Gebühr von 50 PLN erforderlich.',
+        _AppLanguage.ukrainian:
+            'Щоб відкрити цей розділ, потрібна одноразова оплата 50 PLN.',
+        _AppLanguage.russian:
+            'Чтобы открыть этот раздел, требуется единоразовая оплата 50 PLN.',
+      },
+  'Odblokowanie sekcji: 50 zł (jednorazowo)': <_AppLanguage, String>{
+    _AppLanguage.english: 'Section unlock: 50 PLN (one-time)',
+    _AppLanguage.german: 'Bereich freischalten: 50 PLN (einmalig)',
+    _AppLanguage.ukrainian: 'Розблокування розділу: 50 PLN (одноразово)',
+    _AppLanguage.russian: 'Разблокировка раздела: 50 PLN (единоразово)',
+  },
+  'Zapłać 50 zł': <_AppLanguage, String>{
+    _AppLanguage.english: 'Pay 50 PLN',
+    _AppLanguage.german: '50 PLN bezahlen',
+    _AppLanguage.ukrainian: 'Сплатити 50 PLN',
+    _AppLanguage.russian: 'Оплатить 50 PLN',
+  },
+  'Aktywny plan premium': <_AppLanguage, String>{
+    _AppLanguage.english: 'Premium plan active',
+    _AppLanguage.german: 'Premium-Plan aktiv',
+    _AppLanguage.ukrainian: 'Преміум план активний',
+    _AppLanguage.russian: 'Премиум план активен',
+  },
+  'Premium nieaktywne - wybierz plan': <_AppLanguage, String>{
+    _AppLanguage.english: 'Premium inactive - choose a plan',
+    _AppLanguage.german: 'Premium inaktiv - Plan auswählen',
+    _AppLanguage.ukrainian: 'Преміум неактивний - обери план',
+    _AppLanguage.russian: 'Премиум неактивен - выберите план',
+  },
+  'Kup plan i odblokuj gry premium: Flow Runner, Sprint Czytania, Pulse Sync, Split Decision oraz Drabina Pamięci.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Buy a plan and unlock premium games: Flow Runner, Reading Sprint, Pulse Sync, Split Decision and Memory Ladder.',
+        _AppLanguage.german:
+            'Kaufe einen Plan und schalte Premium-Spiele frei: Flow Runner, Lesesprint, Pulse Sync, Split Decision und Gedächtnisleiter.',
+        _AppLanguage.ukrainian:
+            'Придбай план і розблокуй преміум-ігри: Flow Runner, Reading Sprint, Pulse Sync, Split Decision та Memory Ladder.',
+        _AppLanguage.russian:
+            'Купите план и разблокируйте премиум-игры: Flow Runner, Reading Sprint, Pulse Sync, Split Decision и Memory Ladder.',
+      },
+  'Aktywny plan: {plan}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Active plan: {plan}',
+    _AppLanguage.german: 'Aktiver Plan: {plan}',
+    _AppLanguage.ukrainian: 'Активний план: {plan}',
+    _AppLanguage.russian: 'Активный план: {plan}',
+  },
+  'Premium aktywne: {plan}.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Premium active: {plan}.',
+    _AppLanguage.german: 'Premium aktiv: {plan}.',
+    _AppLanguage.ukrainian: 'Преміум активний: {plan}.',
+    _AppLanguage.russian: 'Премиум активен: {plan}.',
+  },
+  'Aby uruchomić "{exerciseTitle}", aktywuj plan Premium.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'To launch "{exerciseTitle}", activate a Premium plan.',
+        _AppLanguage.german:
+            'Um "{exerciseTitle}" zu starten, aktiviere einen Premium-Plan.',
+        _AppLanguage.ukrainian:
+            'Щоб запустити "{exerciseTitle}", активуй Преміум план.',
+        _AppLanguage.russian:
+            'Чтобы запустить "{exerciseTitle}", активируйте Премиум план.',
+      },
+  'MINDE Premium wymagane': <_AppLanguage, String>{
+    _AppLanguage.english: 'MINDE Premium required',
+    _AppLanguage.german: 'MINDE Premium erforderlich',
+    _AppLanguage.ukrainian: 'Потрібен MINDE Premium',
+    _AppLanguage.russian: 'Требуется MINDE Premium',
+  },
+  'Nie teraz': <_AppLanguage, String>{
+    _AppLanguage.english: 'Not now',
+    _AppLanguage.german: 'Nicht jetzt',
+    _AppLanguage.ukrainian: 'Не зараз',
+    _AppLanguage.russian: 'Не сейчас',
+  },
+  '25 zł / miesiąc': <_AppLanguage, String>{
+    _AppLanguage.english: '25 PLN / month',
+    _AppLanguage.german: '25 PLN / Monat',
+    _AppLanguage.ukrainian: '25 PLN / місяць',
+    _AppLanguage.russian: '25 PLN / месяц',
+  },
+  '49 zł / na zawsze': <_AppLanguage, String>{
+    _AppLanguage.english: '49 PLN / forever',
+    _AppLanguage.german: '49 PLN / fur immer',
+    _AppLanguage.ukrainian: '49 PLN / назавжди',
+    _AppLanguage.russian: '49 PLN / навсегда',
+  },
+  'Plan nieaktywny': <_AppLanguage, String>{
+    _AppLanguage.english: 'Inactive plan',
+    _AppLanguage.german: 'Inaktiver Plan',
+    _AppLanguage.ukrainian: 'Неактивний план',
+    _AppLanguage.russian: 'Неактивный план',
+  },
+  'Nie wybrano planu': <_AppLanguage, String>{
+    _AppLanguage.english: 'No plan selected',
+    _AppLanguage.german: 'Kein Plan ausgewahlt',
+    _AppLanguage.ukrainian: 'План не вибрано',
+    _AppLanguage.russian: 'План не выбран',
+  },
+  'Stały dostęp do wszystkich gier premium.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Permanent access to all premium games.',
+    _AppLanguage.german: 'Dauerhafter Zugriff auf alle Premium-Spiele.',
+    _AppLanguage.ukrainian: 'Постійний доступ до всіх преміум-ігор.',
+    _AppLanguage.russian: 'Постоянный доступ ко всем премиум-играм.',
+  },
+  'Jednorazowa opłata i pełny dostęp bez końca.': <_AppLanguage, String>{
+    _AppLanguage.english: 'One-time payment and unlimited full access.',
+    _AppLanguage.german: 'Einmalige Zahlung und voller Zugriff ohne Ende.',
+    _AppLanguage.ukrainian: 'Разова оплата і повний доступ без кінця.',
+    _AppLanguage.russian:
+        'Единоразовый платеж и полный доступ без ограничений.',
+  },
+  'Stabilny rytm': <_AppLanguage, String>{
+    _AppLanguage.english: 'Steady rhythm',
+    _AppLanguage.german: 'Stabiler Rhythmus',
+    _AppLanguage.ukrainian: 'Стабільний ритм',
+    _AppLanguage.russian: 'Стабильный ритм',
+  },
+  'Najwięcej miejsca na wejście w ruch. Dobre tempo na złapanie serii i wyczucia torów.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Most room to enter the flow. Good tempo to build streaks and lane feel.',
+        _AppLanguage.german:
+            'Am meisten Raum, um in Bewegung zu kommen. Gutes Tempo fur Serien und Spurgefuhl.',
+        _AppLanguage.ukrainian:
+            'Найбільше простору для входу в рух. Добрий темп для серій і відчуття доріжок.',
+        _AppLanguage.russian:
+            'Больше всего пространства для входа в движение. Хороший темп для серии и чувства дорожек.',
+      },
+  'Napięcie i korekta': <_AppLanguage, String>{
+    _AppLanguage.english: 'Tension and correction',
+    _AppLanguage.german: 'Spannung und Korrektur',
+    _AppLanguage.ukrainian: 'Напруга і корекція',
+    _AppLanguage.russian: 'Напряжение и коррекция',
+  },
+  'Pełny napór': <_AppLanguage, String>{
+    _AppLanguage.english: 'Full pressure',
+    _AppLanguage.german: 'Volle Intensität',
+    _AppLanguage.ukrainian: 'Повний тиск',
+    _AppLanguage.russian: 'Полный напор',
+  },
+  'stabilne tempo': <_AppLanguage, String>{
+    _AppLanguage.english: 'steady tempo',
+    _AppLanguage.german: 'stabiles Tempo',
+    _AppLanguage.ukrainian: 'стабільний темп',
+    _AppLanguage.russian: 'стабильный темп',
+  },
+  'szybszy wzrost': <_AppLanguage, String>{
+    _AppLanguage.english: 'faster ramp-up',
+    _AppLanguage.german: 'schnellerer Anstieg',
+    _AppLanguage.ukrainian: 'швидший ріст',
+    _AppLanguage.russian: 'более быстрый рост',
+  },
+  'maksymalny napór': <_AppLanguage, String>{
+    _AppLanguage.english: 'maximum pressure',
+    _AppLanguage.german: 'maximale Intensitat',
+    _AppLanguage.ukrainian: 'максимальний тиск',
+    _AppLanguage.russian: 'максимальный напор',
+  },
+  'Aktywna': <_AppLanguage, String>{
+    _AppLanguage.english: 'Active',
+    _AppLanguage.german: 'Aktiv',
+    _AppLanguage.ukrainian: 'Активна',
+    _AppLanguage.russian: 'Активна',
+  },
+  'Użyj': <_AppLanguage, String>{
+    _AppLanguage.english: 'Use',
+    _AppLanguage.german: 'Benutzen',
+    _AppLanguage.ukrainian: 'Використати',
+    _AppLanguage.russian: 'Использовать',
+  },
+  'Kup': <_AppLanguage, String>{
+    _AppLanguage.english: 'Buy',
+    _AppLanguage.german: 'Kaufen',
+    _AppLanguage.ukrainian: 'Купити',
+    _AppLanguage.russian: 'Купить',
+  },
+  '{count} diamentów': <_AppLanguage, String>{
+    _AppLanguage.english: '{count} diamonds',
+    _AppLanguage.german: '{count} Diamanten',
+    _AppLanguage.ukrainian: '{count} діамантів',
+    _AppLanguage.russian: '{count} алмазов',
+  },
+  'Za mało diamentów': <_AppLanguage, String>{
+    _AppLanguage.english: 'Not enough diamonds',
+    _AppLanguage.german: 'Zu wenig Diamanten',
+    _AppLanguage.ukrainian: 'Недостатньо діамантів',
+    _AppLanguage.russian: 'Недостаточно алмазов',
+  },
+  'Aktywna animacja w grze': <_AppLanguage, String>{
+    _AppLanguage.english: 'Active in-game animation',
+    _AppLanguage.german: 'Aktive Spielanimation',
+    _AppLanguage.ukrainian: 'Активна анімація у грі',
+    _AppLanguage.russian: 'Активная анимация в игре',
+  },
+  'Darmowa animacja startowa': <_AppLanguage, String>{
+    _AppLanguage.english: 'Free starter animation',
+    _AppLanguage.german: 'Kostenlose Startanimation',
+    _AppLanguage.ukrainian: 'Безкоштовна стартова анімація',
+    _AppLanguage.russian: 'Бесплатная стартовая анимация',
+  },
+  'Kupiona i gotowa do użycia': <_AppLanguage, String>{
+    _AppLanguage.english: 'Purchased and ready to use',
+    _AppLanguage.german: 'Gekauft und einsatzbereit',
+    _AppLanguage.ukrainian: 'Придбано й готово до використання',
+    _AppLanguage.russian: 'Куплено и готово к использованию',
+  },
+  'Odblokuj za diamenty': <_AppLanguage, String>{
+    _AppLanguage.english: 'Unlock with diamonds',
+    _AppLanguage.german: 'Mit Diamanten freischalten',
+    _AppLanguage.ukrainian: 'Відкрити за діаманти',
+    _AppLanguage.russian: 'Открыть за алмазы',
+  },
+  'Diamenty': <_AppLanguage, String>{
+    _AppLanguage.english: 'Diamonds',
+    _AppLanguage.german: 'Diamanten',
+    _AppLanguage.ukrainian: 'Діаманти',
+    _AppLanguage.russian: 'Алмазы',
+  },
+  'Mapy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Maps',
+    _AppLanguage.german: 'Karten',
+    _AppLanguage.ukrainian: 'Мапи',
+    _AppLanguage.russian: 'Карты',
+  },
+  'Wyjście': <_AppLanguage, String>{
+    _AppLanguage.english: 'Exit',
+    _AppLanguage.german: 'Beenden',
+    _AppLanguage.ukrainian: 'Вихід',
+    _AppLanguage.russian: 'Выход',
+  },
+  'Darmowa': <_AppLanguage, String>{
+    _AppLanguage.english: 'Free',
+    _AppLanguage.german: 'Kostenlos',
+    _AppLanguage.ukrainian: 'Безкоштовна',
+    _AppLanguage.russian: 'Бесплатно',
+  },
+  'Odblokuj mapę': <_AppLanguage, String>{
+    _AppLanguage.english: 'Unlock map',
+    _AppLanguage.german: 'Karte freischalten',
+    _AppLanguage.ukrainian: 'Відкрити мапу',
+    _AppLanguage.russian: 'Открыть карту',
+  },
+  'Odblokuj': <_AppLanguage, String>{
+    _AppLanguage.english: 'Unlock',
+    _AppLanguage.german: 'Freischalten',
+    _AppLanguage.ukrainian: 'Відкрити',
+    _AppLanguage.russian: 'Открыть',
+  },
+  'Użyj mapy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Use map',
+    _AppLanguage.german: 'Karte benutzen',
+    _AppLanguage.ukrainian: 'Використати мапу',
+    _AppLanguage.russian: 'Использовать карту',
+  },
+  'Zmiana sterowania': <_AppLanguage, String>{
+    _AppLanguage.english: 'Change controls',
+    _AppLanguage.german: 'Steuerung ändern',
+    _AppLanguage.ukrainian: 'Змінити керування',
+    _AppLanguage.russian: 'Сменить управление',
+  },
+  'Wybierz sterowanie i pojazd do jazdy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Choose controls and a vehicle',
+    _AppLanguage.german: 'Wähle Steuerung und Fahrzeug',
+    _AppLanguage.ukrainian: 'Обери керування і транспорт',
+    _AppLanguage.russian: 'Выберите управление и транспорт',
+  },
+  'Użyj sterowania': <_AppLanguage, String>{
+    _AppLanguage.english: 'Use controls',
+    _AppLanguage.german: 'Steuerung benutzen',
+    _AppLanguage.ukrainian: 'Використати керування',
+    _AppLanguage.russian: 'Использовать управление',
+  },
+  'Kliknięty meteoryt otwiera hangar sterowań': <_AppLanguage, String>{
+    _AppLanguage.english: 'Tapped meteor opens the control hangar',
+    _AppLanguage.german: 'Angetippter Meteorit öffnet den Steuerungs-Hangar',
+    _AppLanguage.ukrainian: 'Натиснутий метеорит відкриває ангар керування',
+    _AppLanguage.russian: 'Нажатый метеорит открывает ангар управления',
+  },
+  'Graj tym modelem': <_AppLanguage, String>{
+    _AppLanguage.english: 'Play with this model',
+    _AppLanguage.german: 'Mit diesem Modell spielen',
+    _AppLanguage.ukrainian: 'Грати цією моделлю',
+    _AppLanguage.russian: 'Играть этой моделью',
+  },
+  'Wybierz pakiet diamentów': <_AppLanguage, String>{
+    _AppLanguage.english: 'Choose a diamond pack',
+    _AppLanguage.german: 'Wähle ein Diamant-Paket',
+    _AppLanguage.ukrainian: 'Обери пакет діамантів',
+    _AppLanguage.russian: 'Выберите пакет алмазов',
+  },
+  'Pakiet {amount} diamentów': <_AppLanguage, String>{
+    _AppLanguage.english: '{amount} diamond pack',
+    _AppLanguage.german: 'Diamant-Paket {amount}',
+    _AppLanguage.ukrainian: 'Пакет {amount} діамантів',
+    _AppLanguage.russian: 'Пакет {amount} алмазов',
+  },
+  'Klasyczna': <_AppLanguage, String>{
+    _AppLanguage.english: 'Classic',
+    _AppLanguage.german: 'Klassisch',
+    _AppLanguage.ukrainian: 'Класична',
+    _AppLanguage.russian: 'Классическая',
+  },
+  'Kosmiczny tunel': <_AppLanguage, String>{
+    _AppLanguage.english: 'Space tunnel',
+    _AppLanguage.german: 'Weltraum-Tunnel',
+    _AppLanguage.ukrainian: 'Космічний тунель',
+    _AppLanguage.russian: 'Космический туннель',
+  },
+  'Kanion': <_AppLanguage, String>{
+    _AppLanguage.english: 'Canyon',
+    _AppLanguage.german: 'Canyon',
+    _AppLanguage.ukrainian: 'Каньйон',
+    _AppLanguage.russian: 'Каньон',
+  },
+  'Lodowe szczyty': <_AppLanguage, String>{
+    _AppLanguage.english: 'Ice peaks',
+    _AppLanguage.german: 'Eisgipfel',
+    _AppLanguage.ukrainian: 'Крижані вершини',
+    _AppLanguage.russian: 'Ледяные вершины',
+  },
+  'Żuraw wieżowy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Tower crane',
+    _AppLanguage.german: 'Turmkran',
+    _AppLanguage.ukrainian: 'Баштовий кран',
+    _AppLanguage.russian: 'Башенный кран',
+  },
+  'Wulkaniczny rdzeń': <_AppLanguage, String>{
+    _AppLanguage.english: 'Volcanic core',
+    _AppLanguage.german: 'Vulkankern',
+    _AppLanguage.ukrainian: 'Вулканічне ядро',
+    _AppLanguage.russian: 'Вулканическое ядро',
+  },
+  'Koszykarska arena': <_AppLanguage, String>{
+    _AppLanguage.english: 'Basketball arena',
+    _AppLanguage.german: 'Basketball-Arena',
+    _AppLanguage.ukrainian: 'Баскетбольна арена',
+    _AppLanguage.russian: 'Баскетбольная арена',
+  },
+  'Czytelna arena treningowa': <_AppLanguage, String>{
+    _AppLanguage.english: 'Clear training arena',
+    _AppLanguage.german: 'Klare Trainingsarena',
+    _AppLanguage.ukrainian: 'Зрозуміла тренувальна арена',
+    _AppLanguage.russian: 'Понятная тренировочная арена',
+  },
+  'Mocny neon i głęboki kontrast': <_AppLanguage, String>{
+    _AppLanguage.english: 'Strong neon and deep contrast',
+    _AppLanguage.german: 'Starker Neon und tiefer Kontrast',
+    _AppLanguage.ukrainian: 'Яскравий неон і глибокий контраст',
+    _AppLanguage.russian: 'Яркий неон и глубокий контраст',
+  },
+  'Ciepłe światło i piaskowy klimat': <_AppLanguage, String>{
+    _AppLanguage.english: 'Warm light and sandy vibe',
+    _AppLanguage.german: 'Warmes Licht und sandige Stimmung',
+    _AppLanguage.ukrainian: 'Тепле світло і піщана атмосфера',
+    _AppLanguage.russian: 'Теплый свет и песочная атмосфера',
+  },
+  'Wysokie góry i chłodny, matowy klimat': <_AppLanguage, String>{
+    _AppLanguage.english: 'High mountains and a cool, matte vibe',
+    _AppLanguage.german: 'Hohe Berge und ein kühles, mattes Ambiente',
+    _AppLanguage.ukrainian: 'Високі гори та прохолодна, матова атмосфера',
+    _AppLanguage.russian: 'Высокие горы и прохладная матовая атмосфера',
+  },
+  'Plac budowy, żuraw i surowe przeszkody': <_AppLanguage, String>{
+    _AppLanguage.english: 'Construction site, crane and raw obstacles',
+    _AppLanguage.german: 'Baustelle, Kran und raue Hindernisse',
+    _AppLanguage.ukrainian: 'Будмайданчик, кран і грубі перешкоди',
+    _AppLanguage.russian: 'Стройплощадка, кран и грубые препятствия',
+  },
+  'Gorący krater, lawa i kamienne zagrożenia': <_AppLanguage, String>{
+    _AppLanguage.english: 'Hot crater, lava and rocky hazards',
+    _AppLanguage.german: 'Heißer Krater, Lava und steinige Gefahren',
+    _AppLanguage.ukrainian: 'Гарячий кратер, лава і камʼяні загрози',
+    _AppLanguage.russian: 'Горячий кратер, лава и каменные угрозы',
+  },
+  'Parkiet, obręcze i dynamiczne przeszkody z kosza': <_AppLanguage, String>{
+    _AppLanguage.english: 'Court, hoops and dynamic basketball obstacles',
+    _AppLanguage.german: 'Parkett, Körbe und dynamische Basketball-Hindernisse',
+    _AppLanguage.ukrainian:
+        'Паркет, кільця та динамічні баскетбольні перешкоди',
+    _AppLanguage.russian:
+        'Паркет, кольца и динамичные баскетбольные препятствия',
+  },
+  'Nie udało się sfinalizować zakupu.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Could not complete the purchase.',
+    _AppLanguage.german: 'Der Kauf konnte nicht abgeschlossen werden.',
+    _AppLanguage.ukrainian: 'Не вдалося завершити покупку.',
+    _AppLanguage.russian: 'Не удалось завершить покупку.',
+  },
+  'Aktywne: {skin}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Active: {skin}',
+    _AppLanguage.german: 'Aktiv: {skin}',
+    _AppLanguage.ukrainian: 'Активно: {skin}',
+    _AppLanguage.russian: 'Активно: {skin}',
+  },
+  'Przesuwaj palcem w lewo i w prawo po ekranie. Kulka płynnie podąża za ruchem, a arena stopniowo podkręca tempo.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Swipe left and right across the screen. The orb follows smoothly and the arena gradually increases the pace.',
+        _AppLanguage.german:
+            'Wische auf dem Bildschirm nach links und rechts. Die Kugel folgt flüssig, und die Arena erhöht schrittweise das Tempo.',
+        _AppLanguage.ukrainian:
+            'Проводи пальцем ліворуч і праворуч по екрану. Куля плавно рухається за пальцем, а арена поступово прискорює темп.',
+        _AppLanguage.russian:
+            'Проводите пальцем влево и вправо по экрану. Шар плавно следует за движением, а арена постепенно ускоряет темп.',
+      },
+  'Start sesji': <_AppLanguage, String>{
+    _AppLanguage.english: 'Start session',
+    _AppLanguage.german: 'Sitzung starten',
+    _AppLanguage.ukrainian: 'Почати сесію',
+    _AppLanguage.russian: 'Начать сессию',
+  },
+  'Tak': <_AppLanguage, String>{
+    _AppLanguage.english: 'Yes',
+    _AppLanguage.german: 'Ja',
+    _AppLanguage.ukrainian: 'Так',
+    _AppLanguage.russian: 'Да',
+  },
+  'Nie': <_AppLanguage, String>{
+    _AppLanguage.english: 'No',
+    _AppLanguage.german: 'Nein',
+    _AppLanguage.ukrainian: 'Ні',
+    _AppLanguage.russian: 'Нет',
+  },
+  'Wznów': <_AppLanguage, String>{
+    _AppLanguage.english: 'Resume',
+    _AppLanguage.german: 'Fortsetzen',
+    _AppLanguage.ukrainian: 'Відновити',
+    _AppLanguage.russian: 'Продолжить',
+  },
+  'Stop': <_AppLanguage, String>{
+    _AppLanguage.english: 'Stop',
+    _AppLanguage.german: 'Stopp',
+    _AppLanguage.ukrainian: 'Стоп',
+    _AppLanguage.russian: 'Стоп',
+  },
+  'Historia trudnych cyfr': <_AppLanguage, String>{
+    _AppLanguage.english: 'Hard digits history',
+    _AppLanguage.german: 'Verlauf schwieriger Ziffern',
+    _AppLanguage.ukrainian: 'Історія складних цифр',
+    _AppLanguage.russian: 'История сложных цифр',
+  },
+  'Uruchom trening skojarzeń.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Start association training.',
+    _AppLanguage.german: 'Starte das Assoziationstraining.',
+    _AppLanguage.ukrainian: 'Запусти тренування асоціацій.',
+    _AppLanguage.russian: 'Запусти тренировку ассоциаций.',
+  },
+  'Wszystkie cyfry są już utrwalone. Za 4 sekundy wrócisz do wyboru gry.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'All digits are already consolidated. In 4 seconds you will return to game selection.',
+        _AppLanguage.german:
+            'Alle Ziffern sind bereits gefestigt. In 4 Sekunden kehrst du zur Spielauswahl zurück.',
+        _AppLanguage.ukrainian:
+            'Усі цифри вже закріплені. Через 4 секунди ти повернешся до вибору гри.',
+        _AppLanguage.russian:
+            'Все цифры уже закреплены. Через 4 секунды ты вернешься к выбору игры.',
+      },
+  'Wszystkie cyfry są już utrwalone. Możesz uruchomić recall jeszcze raz.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'All digits are already consolidated. You can run recall again.',
+        _AppLanguage.german:
+            'Alle Ziffern sind bereits gefestigt. Du kannst Recall erneut starten.',
+        _AppLanguage.ukrainian:
+            'Усі цифри вже закріплені. Ти можеш запустити recall ще раз.',
+        _AppLanguage.russian:
+            'Все цифры уже закреплены. Ты можешь запустить recall еще раз.',
+      },
+  'Kolejna runda ruszy po krótkiej zapowiedzi.': <_AppLanguage, String>{
+    _AppLanguage.english: 'The next round starts after a short intro.',
+    _AppLanguage.german:
+        'Die nächste Runde startet nach einer kurzen Einblendung.',
+    _AppLanguage.ukrainian: 'Наступний раунд стартує після короткого вступу.',
+    _AppLanguage.russian:
+        'Следующий раунд начнется после короткого вступления.',
+  },
+  'Za chwilę pojawi się liczba. Reagujesz od razu: Tak albo Nie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'A number will appear in a moment. React immediately: Yes or No.',
+        _AppLanguage.german:
+            'Gleich erscheint eine Zahl. Reagiere sofort: Ja oder Nein.',
+        _AppLanguage.ukrainian:
+            "Зараз з'явиться цифра. Реагуй одразу: Так або Ні.",
+        _AppLanguage.russian:
+            'Сейчас появится число. Реагируй сразу: Да или Нет.',
+      },
+  'Masz 4 sekundy na decyzję: Tak albo Nie.': <_AppLanguage, String>{
+    _AppLanguage.english: 'You have 4 seconds to decide: Yes or No.',
+    _AppLanguage.german:
+        'Du hast 4 Sekunden für die Entscheidung: Ja oder Nein.',
+    _AppLanguage.ukrainian: 'У тебе 4 секунди на рішення: Так або Ні.',
+    _AppLanguage.russian: 'У тебя 4 секунды на решение: Да или Нет.',
+  },
+  'Kolejne rundy pokażą już tylko cyfry oznaczone jako Nie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english: 'Next rounds will show only digits marked as No.',
+        _AppLanguage.german:
+            'In den nächsten Runden erscheinen nur Ziffern, die als Nein markiert wurden.',
+        _AppLanguage.ukrainian:
+            'У наступних раундах будуть лише цифри, позначені як Ні.',
+        _AppLanguage.russian:
+            'В следующих раундах будут только цифры, отмеченные как Нет.',
+      },
+  'Po pierwszej rundzie wrócą już tylko cyfry oznaczone jako Nie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'After the first round, only digits marked as No will return.',
+        _AppLanguage.german:
+            'Nach der ersten Runde kehren nur als Nein markierte Ziffern zurück.',
+        _AppLanguage.ukrainian:
+            'Після першого раунду повернуться лише цифри, позначені як Ні.',
+        _AppLanguage.russian:
+            'После первого раунда вернутся только цифры, отмеченные как Нет.',
+      },
+  'Wszystko zapamiętane': <_AppLanguage, String>{
+    _AppLanguage.english: 'Everything memorized',
+    _AppLanguage.german: 'Alles behalten',
+    _AppLanguage.ukrainian: "Усе запам'ятовано",
+    _AppLanguage.russian: 'Все запомнено',
+  },
+  'Do utrwalenia {count}': <_AppLanguage, String>{
+    _AppLanguage.english: '{count} to consolidate',
+    _AppLanguage.german: '{count} zum Festigen',
+    _AppLanguage.ukrainian: '{count} до закріплення',
+    _AppLanguage.russian: '{count} к закреплению',
+  },
+  'Runda {round} • do utrwalenia {left}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Round {round} • {left} to consolidate',
+    _AppLanguage.german: 'Runde {round} • {left} zum Festigen',
+    _AppLanguage.ukrainian: 'Раунд {round} • до закріплення {left}',
+    _AppLanguage.russian: 'Раунд {round} • к закреплению {left}',
+  },
+  'Zapisana historia trudnych cyfr': <_AppLanguage, String>{
+    _AppLanguage.english: 'Saved hard digits history',
+    _AppLanguage.german: 'Gespeicherter Verlauf schwieriger Ziffern',
+    _AppLanguage.ukrainian: 'Збережена історія складних цифр',
+    _AppLanguage.russian: 'Сохраненная история сложных цифр',
+  },
+  'Ładowanie zapisów Recall...': <_AppLanguage, String>{
+    _AppLanguage.english: 'Loading Recall records...',
+    _AppLanguage.german: 'Recall-Einträge werden geladen...',
+    _AppLanguage.ukrainian: 'Завантаження записів Recall...',
+    _AppLanguage.russian: 'Загрузка записей Recall...',
+  },
+  'Skrzynia jest gotowa. Po pierwszej pełnej sesji zapiszą się tu Twoje wyniki i trudne cyfry.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'The chest is ready. After your first full session, your results and difficult digits will appear here.',
+        _AppLanguage.german:
+            'Die Truhe ist bereit. Nach deiner ersten vollständigen Session erscheinen hier deine Ergebnisse und schwierigen Ziffern.',
+        _AppLanguage.ukrainian:
+            "Скриня готова. Після першої повної сесії тут з'являться твої результати та складні цифри.",
+        _AppLanguage.russian:
+            'Сундук готов. После первой полной сессии здесь появятся твои результаты и сложные цифры.',
+      },
+  '{count} zapisów • ostatnia sesja {date} o {time}': <_AppLanguage, String>{
+    _AppLanguage.english: '{count} records • last session {date} at {time}',
+    _AppLanguage.german: '{count} Einträge • letzte Session {date} um {time}',
+    _AppLanguage.ukrainian: '{count} записів • остання сесія {date} о {time}',
+    _AppLanguage.russian: '{count} записей • последняя сессия {date} в {time}',
+  },
+  '{count} zapisów': <_AppLanguage, String>{
+    _AppLanguage.english: '{count} records',
+    _AppLanguage.german: '{count} Einträge',
+    _AppLanguage.ukrainian: '{count} записів',
+    _AppLanguage.russian: '{count} записей',
+  },
+  'Otwórz skrzynię wyników': <_AppLanguage, String>{
+    _AppLanguage.english: 'Open the results chest',
+    _AppLanguage.german: 'Ergebnistruhe öffnen',
+    _AppLanguage.ukrainian: 'Відкрити скриню результатів',
+    _AppLanguage.russian: 'Открыть сундук результатов',
+  },
+  'Start za chwilę. Pierwsza runda przejdzie przez całą bazę cyfr.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Starting soon. The first round will go through the entire digit base.',
+        _AppLanguage.german:
+            'Start in Kürze. Die erste Runde geht durch die gesamte Ziffernbasis.',
+        _AppLanguage.ukrainian:
+            'Старт незабаром. Перший раунд пройде всю базу цифр.',
+        _AppLanguage.russian:
+            'Старт скоро. Первый раунд пройдет по всей базе цифр.',
+      },
+  'Wracamy do treningu. Za chwilę następna liczba.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Back to training. The next number is coming.',
+    _AppLanguage.german: 'Zurück ins Training. Gleich kommt die nächste Zahl.',
+    _AppLanguage.ukrainian:
+        'Повертаємось до тренування. Зараз буде наступна цифра.',
+    _AppLanguage.russian:
+        'Возвращаемся к тренировке. Сейчас будет следующее число.',
+  },
+  'Trening wznowiony.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Training resumed.',
+    _AppLanguage.german: 'Training fortgesetzt.',
+    _AppLanguage.ukrainian: 'Тренування відновлено.',
+    _AppLanguage.russian: 'Тренировка возобновлена.',
+  },
+  'Szybka reakcja: Tak albo Nie.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Quick reaction: Yes or No.',
+    _AppLanguage.german: 'Schnelle Reaktion: Ja oder Nein.',
+    _AppLanguage.ukrainian: 'Швидка реакція: Так або Ні.',
+    _AppLanguage.russian: 'Быстрая реакция: Да или Нет.',
+  },
+  'Utrwalanie': <_AppLanguage, String>{
+    _AppLanguage.english: 'Consolidation',
+    _AppLanguage.german: 'Festigung',
+    _AppLanguage.ukrainian: 'Закріплення',
+    _AppLanguage.russian: 'Закрепление',
+  },
+  'Gratulacje, pamiętasz wszystkie cyfry na pamięć!': <_AppLanguage, String>{
+    _AppLanguage.english: 'Congratulations, you remember all digits by heart!',
+    _AppLanguage.german: 'Glückwunsch, du erinnerst alle Ziffern auswendig!',
+    _AppLanguage.ukrainian: "Вітаю, ти пам'ятаєш усі цифри напам'ять!",
+    _AppLanguage.russian: 'Поздравляю, ты помнишь все цифры наизусть!',
+  },
+  'Statystyki wyczyszczone. Możesz zacząć od nowa.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Stats cleared. You can start again.',
+    _AppLanguage.german: 'Statistiken gelöscht. Du kannst neu starten.',
+    _AppLanguage.ukrainian: 'Статистику очищено. Можеш почати заново.',
+    _AppLanguage.russian: 'Статистика очищена. Можно начать заново.',
+  },
+  'Sesja zatrzymana': <_AppLanguage, String>{
+    _AppLanguage.english: 'Session paused',
+    _AppLanguage.german: 'Sitzung pausiert',
+    _AppLanguage.ukrainian: 'Сесію призупинено',
+    _AppLanguage.russian: 'Сессия остановлена',
+  },
+  'Losuj liczby z całej bazy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Draw numbers from the full base',
+    _AppLanguage.german: 'Zahlen aus der ganzen Basis ziehen',
+    _AppLanguage.ukrainian: 'Тягни числа з усієї бази',
+    _AppLanguage.russian: 'Выбирай числа из всей базы',
+  },
+  'Trening zatrzymany. Możesz ruszyć dalej, kiedy chcesz.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Training paused. You can continue whenever you want.',
+        _AppLanguage.german:
+            'Training pausiert. Du kannst weitermachen, wann du willst.',
+        _AppLanguage.ukrainian:
+            'Тренування зупинено. Ти можеш продовжити будь-коли.',
+        _AppLanguage.russian:
+            'Тренировка остановлена. Ты можешь продолжить в любой момент.',
+      },
+  'Trening zatrzymany. Możesz wrócić do sesji.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Training paused. You can return to the session.',
+    _AppLanguage.german:
+        'Training pausiert. Du kannst zur Sitzung zurückkehren.',
+    _AppLanguage.ukrainian: 'Тренування зупинено. Можеш повернутися до сесії.',
+    _AppLanguage.russian: 'Тренировка остановлена. Можно вернуться к сессии.',
+  },
+  'Zatrzymaj': <_AppLanguage, String>{
+    _AppLanguage.english: 'Pause',
+    _AppLanguage.german: 'Anhalten',
+    _AppLanguage.ukrainian: 'Зупинити',
+    _AppLanguage.russian: 'Остановить',
+  },
+  'Zagraj jeszcze raz': <_AppLanguage, String>{
+    _AppLanguage.english: 'Play again',
+    _AppLanguage.german: 'Noch einmal spielen',
+    _AppLanguage.ukrainian: 'Зіграти ще раз',
+    _AppLanguage.russian: 'Сыграть еще раз',
+  },
+  'Losuj dalej': <_AppLanguage, String>{
+    _AppLanguage.english: 'Draw next',
+    _AppLanguage.german: 'Weiter ziehen',
+    _AppLanguage.ukrainian: 'Тягнути далі',
+    _AppLanguage.russian: 'Дальше',
+  },
+  'Wyczyść bieżącą sesję': <_AppLanguage, String>{
+    _AppLanguage.english: 'Clear current session',
+    _AppLanguage.german: 'Aktuelle Sitzung löschen',
+    _AppLanguage.ukrainian: 'Очистити поточну сесію',
+    _AppLanguage.russian: 'Очистить текущую сессию',
+  },
+  'Szybki recall': <_AppLanguage, String>{
+    _AppLanguage.english: 'Quick recall',
+    _AppLanguage.german: 'Schneller Recall',
+    _AppLanguage.ukrainian: 'Швидкий recall',
+    _AppLanguage.russian: 'Быстрый recall',
+  },
+  'Mnemotechnika w skrócie': <_AppLanguage, String>{
+    _AppLanguage.english: 'Mnemonics in brief',
+    _AppLanguage.german: 'Mnemotechnik in Kürze',
+    _AppLanguage.ukrainian: 'Мнемотехніка коротко',
+    _AppLanguage.russian: 'Мнемотехника вкратце',
+  },
+  'Mnemotechnika to sposób, w którym liczby łączysz z konkretnymi obrazami, żeby szybciej zapisywać i odtwarzać informacje.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Mnemonics is a method where you connect numbers with concrete images to store and recall information faster.',
+        _AppLanguage.german:
+            'Mnemotechnik ist eine Methode, bei der du Zahlen mit konkreten Bildern verbindest, um Informationen schneller zu speichern und abzurufen.',
+        _AppLanguage.ukrainian:
+            "Мнемотехніка - це спосіб, у якому ти поєднуєш числа з конкретними образами, щоб швидше зберігати й відтворювати інформацію.",
+        _AppLanguage.russian:
+            'Мнемотехника - это способ, при котором ты связываешь числа с конкретными образами, чтобы быстрее сохранять и воспроизводить информацию.',
+      },
+  'Przykład: liczbie 14 przypisujesz obraz książki i wyobrażasz sobie, że książka wpada do plecaka z dużym hukiem.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Example: for number 14 you assign the image of a book and imagine the book crashing into a backpack with a loud thud.',
+        _AppLanguage.german:
+            'Beispiel: Der Zahl 14 ordnest du das Bild eines Buches zu und stellst dir vor, wie das Buch mit einem lauten Schlag in einen Rucksack fällt.',
+        _AppLanguage.ukrainian:
+            'Приклад: числу 14 ти призначаєш образ книги й уявляєш, що книга з гучним ударом падає в рюкзак.',
+        _AppLanguage.russian:
+            'Пример: числу 14 ты назначаешь образ книги и представляешь, что книга с громким ударом падает в рюкзак.',
+      },
+  'Kiedy później widzisz 14, obraz wraca automatycznie, a odpowiedź pojawia się szybciej, pewniej i z mniejszym wysiłkiem.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'When you later see 14, the image returns automatically, and the answer appears faster, with more confidence and less effort.',
+        _AppLanguage.german:
+            'Wenn du später 14 siehst, kommt das Bild automatisch zurück und die Antwort erscheint schneller, sicherer und mit weniger Aufwand.',
+        _AppLanguage.ukrainian:
+            'Коли пізніше ти бачиш 14, образ повертається автоматично, а відповідь з’являється швидше, впевненіше й з меншим зусиллям.',
+        _AppLanguage.russian:
+            'Когда позже ты видишь 14, образ возвращается автоматически, а ответ появляется быстрее, увереннее и с меньшим усилием.',
+      },
+  'Budujesz kontrolę w chaosie, szybciej wyłapujesz luki pamięciowe, wzmacniasz koncentrację i utrzymujesz płynny przepływ flow.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You build control in chaos, detect memory gaps faster, strengthen focus, and keep a smooth flow state.',
+        _AppLanguage.german:
+            'Du baust Kontrolle im Chaos auf, erkennst Gedächtnislücken schneller, stärkst die Konzentration und hältst einen flüssigen Flow.',
+        _AppLanguage.ukrainian:
+            'Ти вибудовуєш контроль у хаосі, швидше помічаєш прогалини в памʼяті, підсилюєш концентрацію й утримуєш плавний стан потоку.',
+        _AppLanguage.russian:
+            'Ты выстраиваешь контроль в хаосе, быстрее замечаешь пробелы в памяти, усиливаешь концентрацию и сохраняешь плавный поток.',
+      },
+  '{seconds} s / karta': <_AppLanguage, String>{
+    _AppLanguage.english: '{seconds} s / card',
+    _AppLanguage.german: '{seconds} s / Karte',
+    _AppLanguage.ukrainian: '{seconds} с / картка',
+    _AppLanguage.russian: '{seconds} с / карточка',
+  },
+  'Sprint skojarzeń': <_AppLanguage, String>{
+    _AppLanguage.english: 'Association sprint',
+    _AppLanguage.german: 'Assoziationssprint',
+    _AppLanguage.ukrainian: 'Спринт асоціацій',
+    _AppLanguage.russian: 'Спринт ассоциаций',
+  },
+  'Start sprintu': <_AppLanguage, String>{
+    _AppLanguage.english: 'Start sprint',
+    _AppLanguage.german: 'Sprint starten',
+    _AppLanguage.ukrainian: 'Почати спринт',
+    _AppLanguage.russian: 'Начать спринт',
+  },
+  'Oś tempa': <_AppLanguage, String>{
+    _AppLanguage.english: 'Pace axis',
+    _AppLanguage.german: 'Temposequenz',
+    _AppLanguage.ukrainian: 'Шкала темпу',
+    _AppLanguage.russian: 'Шкала темпа',
+  },
+  'Cyfry lecą jedna po drugiej bez przerwy, a pod każdą od razu widzisz przypisane skojarzenie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Digits flow one after another without a break, and under each one you instantly see the assigned association.',
+        _AppLanguage.german:
+            'Die Ziffern laufen ohne Pause nacheinander, und unter jeder siehst du sofort die zugeordnete Assoziation.',
+        _AppLanguage.ukrainian:
+            'Цифри йдуть одна за одною без пауз, а під кожною ти одразу бачиш відповідну асоціацію.',
+        _AppLanguage.russian:
+            'Цифры идут одна за другой без пауз, а под каждой сразу видна соответствующая ассоциация.',
+      },
+  'Koniec sprintu': <_AppLanguage, String>{
+    _AppLanguage.english: 'Sprint complete',
+    _AppLanguage.german: 'Sprint beendet',
+    _AppLanguage.ukrainian: 'Спринт завершено',
+    _AppLanguage.russian: 'Спринт завершен',
+  },
+  'Masz za sobą pełny ciąg 0-100 bez zatrzymań po drodze.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You have completed the full 0-100 sequence without stopping.',
+        _AppLanguage.german:
+            'Du hast die komplette 0-100-Sequenz ohne Unterbrechung abgeschlossen.',
+        _AppLanguage.ukrainian:
+            'Ти пройшов повну послідовність 0-100 без зупинок.',
+        _AppLanguage.russian:
+            'Ты прошел полную последовательность 0-100 без остановок.',
+      },
+  'Seria cyfr': <_AppLanguage, String>{
+    _AppLanguage.english: 'Digit series',
+    _AppLanguage.german: 'Ziffernserie',
+    _AppLanguage.ukrainian: 'Серія цифр',
+    _AppLanguage.russian: 'Серия цифр',
+  },
+  'Start serii': <_AppLanguage, String>{
+    _AppLanguage.english: 'Start series',
+    _AppLanguage.german: 'Serie starten',
+    _AppLanguage.ukrainian: 'Почати серію',
+    _AppLanguage.russian: 'Начать серию',
+  },
+  'Poziomy układ i wpisywanie całej sekwencji po zniknięciu cyfr.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Horizontal layout and typing the whole sequence after digits disappear.',
+        _AppLanguage.german:
+            'Horizontales Layout und Eingabe der ganzen Sequenz, nachdem die Ziffern verschwinden.',
+        _AppLanguage.ukrainian:
+            'Горизонтальний макет і введення всієї послідовності після зникнення цифр.',
+        _AppLanguage.russian:
+            'Горизонтальная раскладка и ввод всей последовательности после исчезновения цифр.',
+      },
+  'Sprawdź': <_AppLanguage, String>{
+    _AppLanguage.english: 'Check',
+    _AppLanguage.german: 'Prüfen',
+    _AppLanguage.ukrainian: 'Перевірити',
+    _AppLanguage.russian: 'Проверить',
+  },
+  'Do przodu': <_AppLanguage, String>{
+    _AppLanguage.english: 'Move on',
+    _AppLanguage.german: 'Weiter',
+    _AppLanguage.ukrainian: 'Вперед',
+    _AppLanguage.russian: 'Дальше',
+  },
+  'Nie ten układ': <_AppLanguage, String>{
+    _AppLanguage.english: 'Wrong layout',
+    _AppLanguage.german: 'Falsche Reihenfolge',
+    _AppLanguage.ukrainian: 'Неправильний порядок',
+    _AppLanguage.russian: 'Неверный порядок',
+  },
+  'Poprawna sekwencja': <_AppLanguage, String>{
+    _AppLanguage.english: 'Correct sequence',
+    _AppLanguage.german: 'Korrekte Sequenz',
+    _AppLanguage.ukrainian: 'Правильна послідовність',
+    _AppLanguage.russian: 'Правильная последовательность',
+  },
+  'Twoja odpowiedź': <_AppLanguage, String>{
+    _AppLanguage.english: 'Your answer',
+    _AppLanguage.german: 'Deine Antwort',
+    _AppLanguage.ukrainian: 'Твоя відповідь',
+    _AppLanguage.russian: 'Твой ответ',
+  },
+  'Pokaż wynik': <_AppLanguage, String>{
+    _AppLanguage.english: 'Show result',
+    _AppLanguage.german: 'Ergebnis anzeigen',
+    _AppLanguage.ukrainian: 'Показати результат',
+    _AppLanguage.russian: 'Показать результат',
+  },
+  'Następna runda': <_AppLanguage, String>{
+    _AppLanguage.english: 'Next round',
+    _AppLanguage.german: 'Nächste Runde',
+    _AppLanguage.ukrainian: 'Наступний раунд',
+    _AppLanguage.russian: 'Следующий раунд',
+  },
+  'Ten box łączy stałą bazę cyfr 0-100 z trzema trybami pracy. Recall losuje liczbę i wymusza szybką reakcję Tak/Nie, sprint przewija po kolei cyfra + obraz, a seria cyfr pokazuje 10 rund sekwencji do zapamiętania i wpisania.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'This box combines a fixed 0-100 digit base with three modes. Recall draws a number and forces a quick Yes/No reaction, sprint scrolls digit + image in sequence, and digit series shows 10 rounds of a sequence to memorize and type.',
+        _AppLanguage.german:
+            'Diese Box verbindet eine feste 0-100-Ziffernbasis mit drei Modi. Recall zieht eine Zahl und erzwingt eine schnelle Ja/Nein-Reaktion, Sprint zeigt nacheinander Ziffer + Bild, und die Ziffernserie zeigt 10 Runden einer Sequenz zum Merken und Eingeben.',
+        _AppLanguage.ukrainian:
+            'Цей бокс поєднує сталу базу цифр 0-100 з трьома режимами. Recall витягує цифру й вимагає швидкої реакції Так/Ні, sprint послідовно прокручує цифра + образ, а серія цифр дає 10 раундів послідовності для запам’ятовування і введення.',
+        _AppLanguage.russian:
+            'Этот бокс объединяет постоянную базу цифр 0-100 с тремя режимами. Recall выбирает цифру и требует быстрой реакции Да/Нет, sprint показывает по очереди цифра + образ, а серия цифр дает 10 раундов последовательности для запоминания и ввода.',
+      },
+  'Recall pokazuje liczbę, odpala krótki timer i wymaga szybkiej decyzji: Tak albo Nie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Recall shows a number, starts a short timer, and requires a quick decision: Yes or No.',
+        _AppLanguage.german:
+            'Recall zeigt eine Zahl, startet einen kurzen Timer und verlangt eine schnelle Entscheidung: Ja oder Nein.',
+        _AppLanguage.ukrainian:
+            'Recall показує цифру, запускає короткий таймер і вимагає швидкого рішення: Так або Ні.',
+        _AppLanguage.russian:
+            'Recall показывает число, запускает короткий таймер и требует быстрого решения: Да или Нет.',
+      },
+  'Bez odsłaniania skojarzenia zaznacz od razu: Tak albo Nie i przejdź do kolejnej liczby.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Without revealing the association, mark immediately: Yes or No, and move to the next number.',
+        _AppLanguage.german:
+            'Ohne die Assoziation aufzudecken, markiere sofort: Ja oder Nein und gehe zur nächsten Zahl.',
+        _AppLanguage.ukrainian:
+            'Не відкриваючи асоціацію, одразу познач: Так або Ні і переходь до наступної цифри.',
+        _AppLanguage.russian:
+            'Не раскрывая ассоциацию, сразу отметь: Да или Нет и переходи к следующему числу.',
+      },
+  'Historia wyników Recall': <_AppLanguage, String>{
+    _AppLanguage.english: 'Recall results history',
+    _AppLanguage.german: 'Verlauf der Recall-Ergebnisse',
+    _AppLanguage.ukrainian: 'Історія результатів Recall',
+    _AppLanguage.russian: 'История результатов Recall',
+  },
+  'Tutaj zapisują się tylko trudne cyfry, czyli te które wróciły do dodatkowych rund. Widzisz pełną historię, dzień, godzinę, czas sesji i progres do czystej sesji bez problemów.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Only difficult digits are saved here, meaning those that returned in extra rounds. You see full history, day, time, session duration, and progress toward a clean session.',
+        _AppLanguage.german:
+            'Hier werden nur schwierige Ziffern gespeichert, also solche, die in zusätzliche Runden zurückgekehrt sind. Du siehst die gesamte Historie, Datum, Uhrzeit, Sitzungsdauer und den Fortschritt zur sauberen Session.',
+        _AppLanguage.ukrainian:
+            'Тут зберігаються лише складні цифри, тобто ті, що повернулися в додаткових раундах. Ти бачиш повну історію, день, час, тривалість сесії та прогрес до чистої сесії.',
+        _AppLanguage.russian:
+            'Здесь сохраняются только сложные цифры, то есть те, которые вернулись в дополнительных раундах. Ты видишь полную историю, день, время, длительность сессии и прогресс к чистой сессии.',
+      },
+  'Nie ma jeszcze zapisanej historii. Zakończ pierwszą pełną sesję Recall, a skrzynia zacznie zbierać trudne cyfry wraz z datą i godziną.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'No history has been saved yet. Finish your first full Recall session and the chest will start collecting difficult digits with date and time.',
+        _AppLanguage.german:
+            'Es gibt noch keinen gespeicherten Verlauf. Beende deine erste vollständige Recall-Session und die Truhe sammelt schwierige Ziffern mit Datum und Uhrzeit.',
+        _AppLanguage.ukrainian:
+            "Історія ще не збережена. Заверши першу повну сесію Recall, і скриня почне збирати складні цифри з датою та часом.",
+        _AppLanguage.russian:
+            'История еще не сохранена. Заверши первую полную сессию Recall, и сундук начнет собирать сложные цифры с датой и временем.',
+      },
+  'Ostatnia sesja': <_AppLanguage, String>{
+    _AppLanguage.english: 'Last session',
+    _AppLanguage.german: 'Letzte Sitzung',
+    _AppLanguage.ukrainian: 'Остання сесія',
+    _AppLanguage.russian: 'Последняя сессия',
+  },
+  'Do czystej rundy': <_AppLanguage, String>{
+    _AppLanguage.english: 'To a clean round',
+    _AppLanguage.german: 'Bis zur sauberen Runde',
+    _AppLanguage.ukrainian: 'До чистого раунду',
+    _AppLanguage.russian: 'До чистого раунда',
+  },
+  'Zapisane sesje': <_AppLanguage, String>{
+    _AppLanguage.english: 'Saved sessions',
+    _AppLanguage.german: 'Gespeicherte Sitzungen',
+    _AppLanguage.ukrainian: 'Збережені сесії',
+    _AppLanguage.russian: 'Сохраненные сессии',
+  },
+  'bez aktywnych problemów': <_AppLanguage, String>{
+    _AppLanguage.english: 'no active issues',
+    _AppLanguage.german: 'keine aktiven Probleme',
+    _AppLanguage.ukrainian: 'без активних проблем',
+    _AppLanguage.russian: 'без активных проблем',
+  },
+  'top cyfra {number} • {mistakes}': <_AppLanguage, String>{
+    _AppLanguage.english: 'top digit {number} • {mistakes}',
+    _AppLanguage.german: 'Top-Ziffer {number} • {mistakes}',
+    _AppLanguage.ukrainian: 'топ цифра {number} • {mistakes}',
+    _AppLanguage.russian: 'топ цифра {number} • {mistakes}',
+  },
+  'Ostatnia sesja była czysta': <_AppLanguage, String>{
+    _AppLanguage.english: 'Last session was clean',
+    _AppLanguage.german: 'Letzte Sitzung war sauber',
+    _AppLanguage.ukrainian: 'Остання сесія була чиста',
+    _AppLanguage.russian: 'Последняя сессия была чистой',
+  },
+  'Progres do czystej rundy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Progress to a clean round',
+    _AppLanguage.german: 'Fortschritt zur sauberen Runde',
+    _AppLanguage.ukrainian: 'Прогрес до чистого раунду',
+    _AppLanguage.russian: 'Прогресс до чистого раунда',
+  },
+  'W ostatniej sesji żadna cyfra nie wróciła do poprawki. To jest stan docelowy.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'In the last session no digit returned for correction. This is the target state.',
+        _AppLanguage.german:
+            'In der letzten Sitzung musste keine Ziffer nachgearbeitet werden. Das ist der Zielzustand.',
+        _AppLanguage.ukrainian:
+            'В останній сесії жодна цифра не повернулася на доопрацювання. Це цільовий стан.',
+        _AppLanguage.russian:
+            'В последней сессии ни одна цифра не вернулась на доработку. Это целевое состояние.',
+      },
+  'W ostatniej sesji zostało {problemCount} do dopracowania, a {stableCount} przeszło czysto od razu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'In the last session, {problemCount} still need refinement, and {stableCount} passed clean immediately.',
+        _AppLanguage.german:
+            'In der letzten Sitzung blieben {problemCount} zur Nacharbeit, und {stableCount} gingen sofort sauber durch.',
+        _AppLanguage.ukrainian:
+            'В останній сесії залишилось доопрацювати {problemCount}, а {stableCount} пройшли чисто одразу.',
+        _AppLanguage.russian:
+            'В последней сессии осталось доработать {problemCount}, а {stableCount} прошли чисто сразу.',
+      },
+  'Aktualnie bez problematycznych cyfr': <_AppLanguage, String>{
+    _AppLanguage.english: 'Currently no problematic digits',
+    _AppLanguage.german: 'Aktuell keine problematischen Ziffern',
+    _AppLanguage.ukrainian: 'Зараз без проблемних цифр',
+    _AppLanguage.russian: 'Сейчас без проблемных цифр',
+  },
+  'Aktualnie problematyczne cyfry': <_AppLanguage, String>{
+    _AppLanguage.english: 'Currently problematic digits',
+    _AppLanguage.german: 'Aktuell problematische Ziffern',
+    _AppLanguage.ukrainian: 'Поточні проблемні цифри',
+    _AppLanguage.russian: 'Текущие проблемные цифры',
+  },
+  'Ostatnia runda przeszła bez żadnej cyfry do poprawki. W historii niżej nadal możesz śledzić wcześniejsze problemy i tempo poprawy.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'The last round passed with no digits to fix. In the history below you can still track earlier issues and improvement pace.',
+        _AppLanguage.german:
+            'Die letzte Runde lief ohne nachzubessernde Ziffern. In der Historie unten kannst du frühere Probleme und das Verbesserungstempo weiter verfolgen.',
+        _AppLanguage.ukrainian:
+            'Останній раунд пройшов без цифр на доопрацювання. В історії нижче ти можеш відстежувати попередні проблеми й темп покращення.',
+        _AppLanguage.russian:
+            'Последний раунд прошел без цифр для доработки. В истории ниже ты можешь отслеживать прежние проблемы и темп улучшения.',
+      },
+  'Najczęściej wracające cyfry': <_AppLanguage, String>{
+    _AppLanguage.english: 'Most frequently returning digits',
+    _AppLanguage.german: 'Am häufigsten zurückkehrende Ziffern',
+    _AppLanguage.ukrainian: 'Найчастіше повертаються цифри',
+    _AppLanguage.russian: 'Чаще всего возвращаются цифры',
+  },
+  'Na razie nie ma cyfr, które regularnie wracają jako problem w historii.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'So far there are no digits that regularly return as a problem in history.',
+        _AppLanguage.german:
+            'Bisher gibt es keine Ziffern, die in der Historie regelmäßig als Problem zurückkehren.',
+        _AppLanguage.ukrainian:
+            'Поки що немає цифр, які регулярно повертаються як проблема в історії.',
+        _AppLanguage.russian:
+            'Пока нет цифр, которые регулярно возвращаются как проблема в истории.',
+      },
+  'Historia wyników': <_AppLanguage, String>{
+    _AppLanguage.english: 'Results history',
+    _AppLanguage.german: 'Ergebnisverlauf',
+    _AppLanguage.ukrainian: 'Історія результатів',
+    _AppLanguage.russian: 'История результатов',
+  },
+  'aktywna': <_AppLanguage, String>{
+    _AppLanguage.english: 'active',
+    _AppLanguage.german: 'aktiv',
+    _AppLanguage.ukrainian: 'активна',
+    _AppLanguage.russian: 'активна',
+  },
+  '{mistakesLabel} • {sessions} sesje • ostatnio {lastSeen}':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            '{mistakesLabel} • {sessions} sessions • last {lastSeen}',
+        _AppLanguage.german:
+            '{mistakesLabel} • {sessions} Sitzungen • zuletzt {lastSeen}',
+        _AppLanguage.ukrainian:
+            '{mistakesLabel} • {sessions} сесій • востаннє {lastSeen}',
+        _AppLanguage.russian:
+            '{mistakesLabel} • {sessions} сессий • последний раз {lastSeen}',
+      },
+  '{misses}x problem': <_AppLanguage, String>{
+    _AppLanguage.english: '{misses}x issue',
+    _AppLanguage.german: '{misses}x Problem',
+    _AppLanguage.ukrainian: '{misses}x проблема',
+    _AppLanguage.russian: '{misses}x проблема',
+  },
+  'czysto': <_AppLanguage, String>{
+    _AppLanguage.english: 'clean',
+    _AppLanguage.german: 'sauber',
+    _AppLanguage.ukrainian: 'чисто',
+    _AppLanguage.russian: 'чисто',
+  },
+  'Stabilne {stable}/{total}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Stable {stable}/{total}',
+    _AppLanguage.german: 'Stabil {stable}/{total}',
+    _AppLanguage.ukrainian: 'Стабільно {stable}/{total}',
+    _AppLanguage.russian: 'Стабильно {stable}/{total}',
+  },
+  'stabilne {stable}/{total}': <_AppLanguage, String>{
+    _AppLanguage.english: 'stable {stable}/{total}',
+    _AppLanguage.german: 'stabil {stable}/{total}',
+    _AppLanguage.ukrainian: 'стабільно {stable}/{total}',
+    _AppLanguage.russian: 'стабильно {stable}/{total}',
+  },
+  '{stableLabel} • czas sesji {duration}': <_AppLanguage, String>{
+    _AppLanguage.english: '{stableLabel} • session time {duration}',
+    _AppLanguage.german: '{stableLabel} • Sitzungszeit {duration}',
+    _AppLanguage.ukrainian: '{stableLabel} • час сесії {duration}',
+    _AppLanguage.russian: '{stableLabel} • время сессии {duration}',
+  },
+  'Czysta runda. Żadna cyfra nie wróciła do dodatkowej serii.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Clean round. No digit returned to an extra series.',
+        _AppLanguage.german:
+            'Saubere Runde. Keine Ziffer kehrte in eine Zusatzserie zurück.',
+        _AppLanguage.ukrainian:
+            'Чистий раунд. Жодна цифра не повернулася в додаткову серію.',
+        _AppLanguage.russian:
+            'Чистый раунд. Ни одна цифра не вернулась в дополнительную серию.',
+      },
+  '{preview}, +{remaining} więcej': <_AppLanguage, String>{
+    _AppLanguage.english: '{preview}, +{remaining} more',
+    _AppLanguage.german: '{preview}, +{remaining} mehr',
+    _AppLanguage.ukrainian: '{preview}, +{remaining} ще',
+    _AppLanguage.russian: '{preview}, +{remaining} еще',
+  },
+  'Pulse Sync': <_AppLanguage, String>{
+    _AppLanguage.english: 'Pulse Sync',
+    _AppLanguage.german: 'Pulse Sync',
+    _AppLanguage.ukrainian: 'Pulse Sync',
+    _AppLanguage.russian: 'Pulse Sync',
+  },
+  'Łatwy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Easy',
+    _AppLanguage.german: 'Leicht',
+    _AppLanguage.ukrainian: 'Легкий',
+  },
+  'Średni': <_AppLanguage, String>{
+    _AppLanguage.english: 'Medium',
+    _AppLanguage.german: 'Mittel',
+    _AppLanguage.ukrainian: 'Середній',
+  },
+  'Lepsza synchronizacja ciało-uwaga i szybszy stan gotowości.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Better body-attention synchronization and a faster ready state.',
+        _AppLanguage.german:
+            'Bessere Körper-Aufmerksamkeits-Synchronisation und schnellerer Bereitschaftszustand.',
+        _AppLanguage.ukrainian:
+            'Краща синхронізація тіла й уваги та швидший стан готовності.',
+      },
+  'Koło wybija puls, a ty trafiasz dotykiem dokładnie w rytm. Wybierasz jeden z trzech poziomów tempa i przez minutę ustawiasz ciało oraz uwagę pod konkretny rytm.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'The circle sets the pulse, and you tap exactly on beat. You choose one of three pace levels and use one minute to align your body and attention to a specific rhythm.',
+        _AppLanguage.german:
+            'Der Kreis gibt den Puls vor, und du tippst genau im Takt. Du wählst eines von drei Tempoleveln und richtest Körper und Aufmerksamkeit eine Minute lang auf einen klaren Rhythmus aus.',
+        _AppLanguage.ukrainian:
+            'Коло задає пульс, а ти торкаєшся точно в ритм. Обираєш один із трьох темпових рівнів і протягом хвилини налаштовуєш тіло та увагу під чіткий ритм.',
+      },
+  'Wybierz poziom Łatwy, Średni albo Hard i ustaw telefon stabilnie przed sobą.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Choose Easy, Medium, or Hard and place your phone steadily in front of you.',
+        _AppLanguage.german:
+            'Wähle Leicht, Mittel oder Schwer und stelle dein Handy stabil vor dich.',
+        _AppLanguage.ukrainian:
+            'Обери рівень Легкий, Середній або Складний і стабільно постав телефон перед собою.',
+      },
+  'Dotykaj koła dokładnie wtedy, gdy wybija rytm i daje krótką haptykę.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Tap the circle exactly when it hits the beat and gives a short haptic cue.',
+        _AppLanguage.german:
+            'Tippe den Kreis genau dann, wenn der Takt kommt und ein kurzes haptisches Signal gibt.',
+        _AppLanguage.ukrainian:
+            'Торкайся кола точно в момент удару ритму й короткого тактильного сигналу.',
+      },
+  'Po minucie od razu przejdź do zadania, zanim rytm opadnie.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'After one minute, move to your task immediately before the rhythm fades.',
+    _AppLanguage.german:
+        'Wechsle nach einer Minute direkt zur Aufgabe, bevor der Rhythmus nachlässt.',
+    _AppLanguage.ukrainian:
+        'Після хвилини одразу переходь до завдання, поки ритм не згас.',
+  },
+  'Wybierz poziom i uruchom minutę rytmu.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Choose a level and start one minute of rhythm.',
+    _AppLanguage.german: 'Wähle ein Level und starte eine Minute Rhythmus.',
+    _AppLanguage.ukrainian: 'Обери рівень і запусти одну хвилину ритму.',
+  },
+  'Poziom {level}. Kliknij start i złap rytm.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Level {level}. Press start and lock into the rhythm.',
+    _AppLanguage.german:
+        'Level {level}. Drücke Start und finde in den Rhythmus.',
+    _AppLanguage.ukrainian: 'Рівень {level}. Натисни старт і впіймай ритм.',
+  },
+  'Start za 3 sekundy. Przygotuj rytm dłoni.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Start in 3 seconds. Prepare your hand rhythm.',
+    _AppLanguage.german:
+        'Start in 3 Sekunden. Bereite den Rhythmus deiner Hand vor.',
+    _AppLanguage.ukrainian: 'Старт за 3 секунди. Підготуй ритм руки.',
+  },
+  'Stukaj wtedy, gdy koło wybija puls i daje haptykę.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Tap when the circle hits the pulse and gives haptic feedback.',
+    _AppLanguage.german:
+        'Tippe dann, wenn der Kreis den Puls vorgibt und haptisches Feedback gibt.',
+    _AppLanguage.ukrainian:
+        'Тапай тоді, коли коло відбиває пульс і дає тактильний відгук.',
+  },
+  'Pauza. Wróć, gdy chcesz ponownie wejść w rytm.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Paused. Come back when you want to lock in again.',
+    _AppLanguage.german:
+        'Pause. Komm zurück, wenn du wieder in den Rhythmus gehen willst.',
+    _AppLanguage.ukrainian:
+        'Пауза. Повернись, коли захочеш знову увійти в ритм.',
+  },
+  'Poza pulsem. Złap koło i pozwól rytmowi wejść głębiej.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Off pulse. Catch the circle and let the rhythm sink in deeper.',
+    _AppLanguage.german:
+        'Außerhalb des Pulses. Fang den Kreis und lass den Rhythmus tiefer greifen.',
+    _AppLanguage.ukrainian:
+        'Поза пульсом. Упіймай коло й дай ритму зайти глибше.',
+  },
+  'Idealnie. Punkt zapisany. Błąd: {delta} ms.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Perfect. Point added. Error: {delta} ms.',
+    _AppLanguage.german: 'Perfekt. Punkt gezählt. Fehler: {delta} ms.',
+    _AppLanguage.ukrainian: 'Ідеально. Бал зараховано. Похибка: {delta} мс.',
+  },
+  'Dobry tap. Punkt zapisany. Błąd: {delta} ms.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Good tap. Point added. Error: {delta} ms.',
+    _AppLanguage.german: 'Guter Tap. Punkt gezählt. Fehler: {delta} ms.',
+    _AppLanguage.ukrainian: 'Добрий тап. Бал зараховано. Похибка: {delta} мс.',
+  },
+  '{message} Błąd: {delta} ms.': <_AppLanguage, String>{
+    _AppLanguage.english: '{message} Error: {delta} ms.',
+    _AppLanguage.german: '{message} Fehler: {delta} ms.',
+    _AppLanguage.ukrainian: '{message} Похибка: {delta} мс.',
+  },
+  'Wibracje są aktywne na pulsie i przy dobrych trafieniach.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Vibrations are active on each pulse and on good hits.',
+        _AppLanguage.german:
+            'Vibration ist bei jedem Puls und bei guten Treffern aktiv.',
+        _AppLanguage.ukrainian:
+            'Вібрація активна на кожному пульсі та при вдалих влучаннях.',
+      },
+  'Masz 3 poziomy tempa. Wybierz poziom i kliknij start.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You have 3 pace levels. Choose one and press start.',
+        _AppLanguage.german:
+            'Du hast 3 Tempolevel. Wähle eines und drücke Start.',
+        _AppLanguage.ukrainian:
+            'У тебе 3 рівні темпу. Обери рівень і натисни старт.',
+      },
+  'Kliknij start i złap rytm.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Press start and lock into the rhythm.',
+    _AppLanguage.german: 'Drücke Start und finde in den Rhythmus.',
+    _AppLanguage.ukrainian: 'Натисни старт і впіймай ритм.',
+  },
+  'Lepszy rytm wzroku i szybsze wejście w tekst.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Better visual rhythm and faster entry into text.',
+    _AppLanguage.german:
+        'Besserer Blickrhythmus und schnellerer Einstieg in den Text.',
+    _AppLanguage.ukrainian: 'Кращий ритм погляду й швидший вхід у текст.',
+  },
+  'Po starcie wchodzisz w serię 20 tekstów, ale każde zdanie rozbija się na pojedyncze słowa wyświetlane w środku ekranu. Wybierasz poziom długości tekstu, ustawiasz tempo w zakresie 400-1000 słów na minutę i utrzymujesz rytm dzięki automatycznemu 2, 1, START.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'After start, you enter a series of 20 texts, but each sentence is split into single words shown in the center of the screen. You choose text-length level, set pace between 400-1000 words per minute, and hold rhythm with automatic 2, 1, START.',
+        _AppLanguage.german:
+            'Nach dem Start gehst du in eine Serie von 20 Texten, aber jeder Satz wird in einzelne Wörter zerlegt, die in der Bildschirmmitte angezeigt werden. Du wählst ein Textlängen-Level, stellst das Tempo im Bereich von 400-1000 Wörtern pro Minute ein und hältst den Rhythmus dank automatischem 2, 1, START.',
+        _AppLanguage.ukrainian:
+            'Після старту ти входиш у серію з 20 текстів, але кожне речення розбивається на окремі слова в центрі екрана. Обираєш рівень довжини тексту, ставиш темп 400-1000 слів за хвилину й тримаєш ритм завдяки автоматичному 2, 1, START.',
+      },
+  'Wybierz poziom 1-5. Każdy wyższy poziom daje dłuższe i gęstsze teksty.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Choose level 1-5. Each higher level gives longer and denser texts.',
+        _AppLanguage.german:
+            'Wähle Level 1-5. Jedes höhere Level bringt längere und dichtere Texte.',
+        _AppLanguage.ukrainian:
+            'Обери рівень 1-5. Кожен вищий рівень дає довші й щільніші тексти.',
+      },
+  'Pod poziomami ustaw oś prędkości w zakresie 400-1000 sł/min.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Under levels, set the speed axis in the 400-1000 wpm range.',
+        _AppLanguage.german:
+            'Unter den Leveln stellst du die Geschwindigkeitsachse im Bereich 400-1000 WPM ein.',
+        _AppLanguage.ukrainian:
+            'Під рівнями налаштуй шкалу швидкості в діапазоні 400-1000 сл/хв.',
+      },
+  'Po kliknięciu Start sesji patrz w środek ekranu i łap słowa bez cofania wzroku.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'After pressing Start session, look at the center of the screen and catch words without moving your gaze back.',
+        _AppLanguage.german:
+            'Nach Klick auf Sitzung starten schau in die Bildschirmmitte und erfasse die Wörter, ohne den Blick zurückzuziehen.',
+        _AppLanguage.ukrainian:
+            'Після натискання Почати сесію дивись у центр екрана й лови слова без повернення погляду назад.',
+      },
+  'Stabilniejsze trzymanie informacji w głowie.': <_AppLanguage, String>{
+    _AppLanguage.english: 'More stable information holding in your mind.',
+    _AppLanguage.german: 'Stabileres Halten von Informationen im Kopf.',
+    _AppLanguage.ukrainian: 'Стабільніше утримання інформації в голові.',
+  },
+  'Wybierasz jeden z trzech trybów: sekwencje ruchów, kod cyfr albo półkę słów. Każdy wariant podbija obciążenie pamięci roboczej, ale robi to innym kanałem.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You choose one of three modes: movement sequences, digit code, or word shelf. Each mode increases working-memory load through a different channel.',
+        _AppLanguage.german:
+            'Du wählst einen von drei Modi: Bewegungssequenzen, Zahlencode oder Wortregal. Jeder Modus erhöht die Belastung des Arbeitsgedächtnisses über einen anderen Kanal.',
+        _AppLanguage.ukrainian:
+            "Ти обираєш один із трьох режимів: послідовності рухів, код цифр або полиця слів. Кожен режим підсилює навантаження на робочу пам'ять іншим каналом.",
+      },
+  'Wybierz grę pamięciową: ruch, cyfry albo słowa.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Choose a memory game: movement, digits, or words.',
+    _AppLanguage.german:
+        'Wähle ein Gedächtnisspiel: Bewegung, Ziffern oder Wörter.',
+    _AppLanguage.ukrainian: "Обери гру на пам'ять: рух, цифри або слова.",
+  },
+  'Patrz na układ tylko do momentu, aż zniknie z ekranu.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Look at the pattern only until it disappears from the screen.',
+    _AppLanguage.german:
+        'Schau auf das Muster nur bis zu dem Moment, in dem es vom Bildschirm verschwindet.',
+    _AppLanguage.ukrainian:
+        'Дивись на шаблон лише до моменту, коли він зникне з екрана.',
+  },
+  'Odtwórz go z pamięci i utrzymuj serię, żeby dojść do dłuższych ciągów.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Recreate it from memory and keep your streak to reach longer sequences.',
+        _AppLanguage.german:
+            'Stelle es aus dem Gedächtnis nach und halte die Serie, um zu längeren Sequenzen zu kommen.',
+        _AppLanguage.ukrainian:
+            "Відтвори його з пам'яті та тримай серію, щоб дійти до довших послідовностей.",
+      },
+  'Ruchy': <_AppLanguage, String>{
+    _AppLanguage.english: 'Moves',
+    _AppLanguage.german: 'Bewegungen',
+    _AppLanguage.ukrainian: 'Рухи',
+  },
+  'Ścieżka Ruchów': <_AppLanguage, String>{
+    _AppLanguage.english: 'Movement Path',
+    _AppLanguage.german: 'Bewegungspfad',
+    _AppLanguage.ukrainian: 'Шлях Рухів',
+  },
+  'Kod cyfr': <_AppLanguage, String>{
+    _AppLanguage.english: 'Digit code',
+    _AppLanguage.german: 'Zahlencode',
+    _AppLanguage.ukrainian: 'Код цифр',
+  },
+  'Kod Cyfr': <_AppLanguage, String>{
+    _AppLanguage.english: 'Digit Code',
+    _AppLanguage.german: 'Zahlencode',
+    _AppLanguage.ukrainian: 'Код Цифр',
+  },
+  'Półka słów': <_AppLanguage, String>{
+    _AppLanguage.english: 'Word shelf',
+    _AppLanguage.german: 'Wortregal',
+    _AppLanguage.ukrainian: 'Полиця слів',
+  },
+  'Półka Słów': <_AppLanguage, String>{
+    _AppLanguage.english: 'Word Shelf',
+    _AppLanguage.german: 'Wortregal',
+    _AppLanguage.ukrainian: 'Полиця Слів',
+  },
+  'Pamięć sekwencji': <_AppLanguage, String>{
+    _AppLanguage.english: 'Sequence memory',
+    _AppLanguage.german: 'Sequenzgedächtnis',
+    _AppLanguage.ukrainian: "Пам'ять послідовностей",
+  },
+  'Rytm + kierunek': <_AppLanguage, String>{
+    _AppLanguage.english: 'Rhythm + direction',
+    _AppLanguage.german: 'Rhythmus + Richtung',
+    _AppLanguage.ukrainian: 'Ритм + напрямок',
+  },
+  'Pamięć liczbowa': <_AppLanguage, String>{
+    _AppLanguage.english: 'Numeric memory',
+    _AppLanguage.german: 'Zahlengedächtnis',
+    _AppLanguage.ukrainian: "Числова пам'ять",
+  },
+  '3-10 cyfr': <_AppLanguage, String>{
+    _AppLanguage.english: '3-10 digits',
+    _AppLanguage.german: '3-10 Ziffern',
+    _AppLanguage.ukrainian: '3-10 цифр',
+  },
+  'Pamięć werbalna': <_AppLanguage, String>{
+    _AppLanguage.english: 'Verbal memory',
+    _AppLanguage.german: 'Verbales Gedächtnis',
+    _AppLanguage.ukrainian: "Вербальна пам'ять",
+  },
+  'Selekcja słów': <_AppLanguage, String>{
+    _AppLanguage.english: 'Word selection',
+    _AppLanguage.german: 'Wortauswahl',
+    _AppLanguage.ukrainian: 'Вибір слів',
+  },
+  'Drabina Pamięci • Kod Cyfr': <_AppLanguage, String>{
+    _AppLanguage.english: 'Memory Ladder • Digit Code',
+    _AppLanguage.german: 'Gedächtnisleiter • Zahlencode',
+    _AppLanguage.ukrainian: "Драбина Пам'яті • Код Цифр",
+  },
+  'Drabina Pamięci • Półka Słów': <_AppLanguage, String>{
+    _AppLanguage.english: 'Memory Ladder • Word Shelf',
+    _AppLanguage.german: 'Gedächtnisleiter • Wortregal',
+    _AppLanguage.ukrainian: "Драбина Пам'яті • Полиця Слів",
+  },
+  'Sesja zakończona po dwóch błędach. Za moment wrócisz do wyboru gry.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Session ended after two mistakes. You will return to game selection in a moment.',
+        _AppLanguage.german:
+            'Sitzung nach zwei Fehlern beendet. Gleich kehrst du zur Spielauswahl zurück.',
+        _AppLanguage.ukrainian:
+            'Сесію завершено після двох помилок. За мить ти повернешся до вибору гри.',
+      },
+  'Sesja zakończona po dwóch błędach. Możesz uruchomić ją ponownie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Session ended after two mistakes. You can start it again.',
+        _AppLanguage.german:
+            'Sitzung nach zwei Fehlern beendet. Du kannst sie erneut starten.',
+        _AppLanguage.ukrainian:
+            'Сесію завершено після двох помилок. Ти можеш запустити її знову.',
+      },
+  'Najpierw zobaczysz kod, potem cyfry zaczną miękko znikać i trzeba będzie wpisać je z pamięci.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'First you will see the code, then the digits fade out and you need to enter them from memory.',
+        _AppLanguage.german:
+            'Zuerst siehst du den Code, dann blenden die Ziffern weich aus und du gibst sie aus dem Gedächtnis ein.',
+        _AppLanguage.ukrainian:
+            "Спочатку ти побачиш код, потім цифри плавно зникнуть, і треба буде ввести їх з пам'яті.",
+      },
+  'Patrz spokojnie na cały ciąg. Nie próbuj go powtarzać na głos.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Look calmly at the full sequence. Do not try to repeat it out loud.',
+        _AppLanguage.german:
+            'Schau ruhig auf die ganze Folge. Versuche nicht, sie laut zu wiederholen.',
+        _AppLanguage.ukrainian:
+            'Спокійно дивись на всю послідовність. Не намагайся повторювати її вголос.',
+      },
+  'Wpisz dokładnie ten sam układ cyfr. Druga pomyłka kończy sesję.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Enter exactly the same digit pattern. The second mistake ends the session.',
+    _AppLanguage.german:
+        'Gib genau dieselbe Ziffernfolge ein. Der zweite Fehler beendet die Sitzung.',
+    _AppLanguage.ukrainian:
+        'Введи точно ту саму послідовність цифр. Друга помилка завершує сесію.',
+  },
+  'Dobra odpowiedź buduje serię. Gdy zamkniesz serię, długość kodu wzrośnie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'A correct answer builds the streak. When you complete the streak, code length increases.',
+        _AppLanguage.german:
+            'Eine richtige Antwort baut die Serie auf. Wenn du die Serie abschließt, wird der Code länger.',
+        _AppLanguage.ukrainian:
+            'Правильна відповідь будує серію. Коли закриєш серію, довжина коду зросте.',
+      },
+  'Jedna pomyłka jeszcze zostawia ci ruch. Druga zamyka sesję.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'One mistake still leaves you one chance. The second ends the session.',
+    _AppLanguage.german:
+        'Ein Fehler lässt dir noch eine Chance. Der zweite beendet die Sitzung.',
+    _AppLanguage.ukrainian:
+        'Одна помилка ще залишає тобі шанс. Друга завершує сесію.',
+  },
+  'Zaczynasz od 3 cyfr i możesz dojść aż do 10.': <_AppLanguage, String>{
+    _AppLanguage.english: 'You start at 3 digits and can reach up to 10.',
+    _AppLanguage.german: 'Du startest mit 3 Ziffern und kannst bis 10 kommen.',
+    _AppLanguage.ukrainian: 'Починаєш з 3 цифр і можеш дійти до 10.',
+  },
+  'Za moment zobaczysz półkę. Słowa znikną i trzeba będzie wskazać dokładnie te same.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'In a moment you will see the shelf. The words disappear and then you need to pick exactly the same ones.',
+        _AppLanguage.german:
+            'Gleich siehst du das Regal. Die Wörter verschwinden, danach wählst du genau dieselben aus.',
+        _AppLanguage.ukrainian:
+            'За мить побачиш полицю. Слова зникнуть, і треба буде вибрати точно ті самі.',
+      },
+  'Chwytaj obrazy słów, nie czytaj ich za wolno jedno po drugim.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Capture the word shapes, do not read them too slowly one by one.',
+        _AppLanguage.german:
+            'Erfasse die Wortbilder, lies sie nicht langsam nacheinander.',
+        _AppLanguage.ukrainian:
+            'Схоплюй образи слів, не читай їх повільно по одному.',
+      },
+  'Wybierz dokładnie tyle słów, ile było na półce. Dwie pomyłki na poziomie cofają o jeden krok.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Choose exactly as many words as were on the shelf. Two mistakes on a level drop you back by one step.',
+        _AppLanguage.german:
+            'Wähle genau so viele Wörter, wie auf dem Regal waren. Zwei Fehler auf einem Level werfen dich um eine Stufe zurück.',
+        _AppLanguage.ukrainian:
+            'Вибери рівно стільки слів, скільки було на полиці. Дві помилки на рівні відкидають на один крок назад.',
+      },
+  'Dobra odpowiedź zalicza się automatycznie. Zielone potwierdzenie zniknie i za chwilę ruszy następna półka.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'A correct answer is counted automatically. The green confirmation disappears and the next shelf starts soon.',
+        _AppLanguage.german:
+            'Eine richtige Antwort wird automatisch gewertet. Die grüne Bestätigung verschwindet und gleich startet das nächste Regal.',
+        _AppLanguage.ukrainian:
+            'Правильна відповідь зараховується автоматично. Зелене підтвердження зникне, і скоро стартує наступна полиця.',
+      },
+  'Pomyłka cofa postęp. Przy dwóch błędach na poziomie liczba słów spada.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'A mistake reduces progress. With two mistakes on a level, the word count drops.',
+        _AppLanguage.german:
+            'Ein Fehler verringert den Fortschritt. Bei zwei Fehlern auf einem Level sinkt die Wortanzahl.',
+        _AppLanguage.ukrainian:
+            'Помилка зменшує прогрес. При двох помилках на рівні кількість слів падає.',
+      },
+  'Zaczynasz od 3 słów i możesz dojść do 8.': <_AppLanguage, String>{
+    _AppLanguage.english: 'You start at 3 words and can reach 8.',
+    _AppLanguage.german: 'Du startest mit 3 Wörtern und kannst bis 8 kommen.',
+    _AppLanguage.ukrainian: 'Починаєш з 3 слів і можеш дійти до 8.',
+  },
+  'Gry': <_AppLanguage, String>{
+    _AppLanguage.english: 'Games',
+    _AppLanguage.german: 'Spiele',
+    _AppLanguage.ukrainian: 'Ігри',
+    _AppLanguage.russian: 'Игры',
+  },
+  'Tryby gry': <_AppLanguage, String>{
+    _AppLanguage.english: 'Game modes',
+    _AppLanguage.german: 'Spielmodi',
+    _AppLanguage.ukrainian: 'Режими гри',
+    _AppLanguage.russian: 'Режимы игры',
+  },
+  'Zakres': <_AppLanguage, String>{
+    _AppLanguage.english: 'Range',
+    _AppLanguage.german: 'Bereich',
+    _AppLanguage.ukrainian: 'Діапазон',
+    _AppLanguage.russian: 'Диапазон',
+  },
+  'Seria': <_AppLanguage, String>{
+    _AppLanguage.english: 'Series',
+    _AppLanguage.german: 'Serie',
+    _AppLanguage.ukrainian: 'Серія',
+    _AppLanguage.russian: 'Серия',
+  },
+  'Koniec serii': <_AppLanguage, String>{
+    _AppLanguage.english: 'Series complete',
+    _AppLanguage.german: 'Serie beendet',
+    _AppLanguage.ukrainian: 'Серію завершено',
+    _AppLanguage.russian: 'Серия завершена',
+  },
+  '{value} sł/min': <_AppLanguage, String>{
+    _AppLanguage.english: '{value} wpm',
+    _AppLanguage.german: '{value} WPM',
+    _AppLanguage.ukrainian: '{value} сл/хв',
+    _AppLanguage.russian: '{value} сл/мин',
+  },
+  '{count} tekstów': <_AppLanguage, String>{
+    _AppLanguage.english: '{count} texts',
+    _AppLanguage.german: '{count} Texte',
+    _AppLanguage.ukrainian: '{count} текстів',
+    _AppLanguage.russian: '{count} текстов',
+  },
+  '{speed} sł/min • rytm 2, 1, START': <_AppLanguage, String>{
+    _AppLanguage.english: '{speed} wpm • rhythm 2, 1, START',
+    _AppLanguage.german: '{speed} WPM • Rhythmus 2, 1, START',
+    _AppLanguage.ukrainian: '{speed} сл/хв • ритм 2, 1, START',
+    _AppLanguage.russian: '{speed} сл/мин • ритм 2, 1, START',
+  },
+  'Masz za sobą {series}. Zatrzymaj na chwilę sens i rytm, które zostały w głowie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You finished {series}. Pause for a moment and keep the meaning and rhythm in your head.',
+        _AppLanguage.german:
+            'Du hast {series} abgeschlossen. Halt kurz an und behalte Sinn und Rhythmus im Kopf.',
+        _AppLanguage.ukrainian:
+            'Ти пройшов {series}. Зупинись на мить і втримай сенс та ритм у голові.',
+        _AppLanguage.russian:
+            'Ты прошел {series}. Остановись на мгновение и удержи смысл и ритм в голове.',
+      },
+  'Start': <_AppLanguage, String>{
+    _AppLanguage.english: 'Start',
+    _AppLanguage.german: 'Start',
+    _AppLanguage.ukrainian: 'Старт',
+    _AppLanguage.russian: 'Старт',
+  },
+  'Zacznij od nowa': <_AppLanguage, String>{
+    _AppLanguage.english: 'Start over',
+    _AppLanguage.german: 'Neu starten',
+    _AppLanguage.ukrainian: 'Почати спочатку',
+    _AppLanguage.russian: 'Начать заново',
+  },
+  'Naciśnij Start sesji i złap kod cyfr.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Press Start session and catch the digit code.',
+    _AppLanguage.german: 'Drücke Sitzung starten und erfasse den Zahlencode.',
+    _AppLanguage.ukrainian: 'Натисни Почати сесію й зафіксуй код цифр.',
+    _AppLanguage.russian: 'Нажми Начать сессию и поймай код цифр.',
+  },
+  'Naciśnij Start sesji i zapamiętaj półkę słów.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Press Start session and memorize the word shelf.',
+    _AppLanguage.german: 'Drücke Sitzung starten und merke dir das Wortregal.',
+    _AppLanguage.ukrainian: 'Натисни Почати сесію й запамʼятай полицю слів.',
+    _AppLanguage.russian: 'Нажми Начать сессию и запомни полку слов.',
+  },
+  'Gra startuje. Złap kod.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Game starts. Catch the code.',
+    _AppLanguage.german: 'Spiel startet. Erfasse den Code.',
+    _AppLanguage.ukrainian: 'Гра стартує. Зафіксуй код.',
+    _AppLanguage.russian: 'Игра стартует. Зафиксируй код.',
+  },
+  'Gra startuje. Złap półkę.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Game starts. Catch the shelf.',
+    _AppLanguage.german: 'Spiel startet. Erfasse das Regal.',
+    _AppLanguage.ukrainian: 'Гра стартує. Зафіксуй полицю.',
+    _AppLanguage.russian: 'Игра стартует. Зафиксируй полку.',
+  },
+  'Zapamiętaj {count}.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Memorize {count}.',
+    _AppLanguage.german: 'Merke dir {count}.',
+    _AppLanguage.ukrainian: "Запам'ятай {count}.",
+    _AppLanguage.russian: 'Запомни {count}.',
+  },
+  'Wpisz kod z pamięci.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Enter the code from memory.',
+    _AppLanguage.german: 'Gib den Code aus dem Gedächtnis ein.',
+    _AppLanguage.ukrainian: "Введи код з пам'яті.",
+    _AppLanguage.russian: 'Введи код по памяти.',
+  },
+  '{message} Błędy {mistakes}/2.': <_AppLanguage, String>{
+    _AppLanguage.english: '{message} Mistakes {mistakes}/2.',
+    _AppLanguage.german: '{message} Fehler {mistakes}/2.',
+    _AppLanguage.ukrainian: '{message} Помилки {mistakes}/2.',
+    _AppLanguage.russian: '{message} Ошибки {mistakes}/2.',
+  },
+  'Pełna seria. Wchodzisz na {count}.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Full streak. You move to {count}.',
+    _AppLanguage.german: 'Volle Serie. Du gehst auf {count}.',
+    _AppLanguage.ukrainian: 'Повна серія. Переходиш на {count}.',
+    _AppLanguage.russian: 'Полная серия. Переходишь на {count}.',
+  },
+  'Maksimum osiągnięte. Trzymasz {count}.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Maximum reached. You hold {count}.',
+    _AppLanguage.german: 'Maximum erreicht. Du hältst {count}.',
+    _AppLanguage.ukrainian: 'Досягнуто максимуму. Тримаєш {count}.',
+    _AppLanguage.russian: 'Максимум достигнут. Держишь {count}.',
+  },
+  'Dobrze. Seria {progress}/{required} na tym poziomie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Good. Streak {progress}/{required} on this level.',
+        _AppLanguage.german:
+            'Gut. Serie {progress}/{required} auf diesem Level.',
+        _AppLanguage.ukrainian:
+            'Добре. Серія {progress}/{required} на цьому рівні.',
+        _AppLanguage.russian:
+            'Хорошо. Серия {progress}/{required} на этом уровне.',
+      },
+  'To nie ten kod. Postęp {progress}/{required}, błędy {mistakes}/2.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Wrong code. Progress {progress}/{required}, mistakes {mistakes}/2.',
+        _AppLanguage.german:
+            'Falscher Code. Fortschritt {progress}/{required}, Fehler {mistakes}/2.',
+        _AppLanguage.ukrainian:
+            'Це не той код. Прогрес {progress}/{required}, помилки {mistakes}/2.',
+        _AppLanguage.russian:
+            'Это не тот код. Прогресс {progress}/{required}, ошибки {mistakes}/2.',
+      },
+  'Wpisz kod': <_AppLanguage, String>{
+    _AppLanguage.english: 'Enter code',
+    _AppLanguage.german: 'Code eingeben',
+    _AppLanguage.ukrainian: 'Введи код',
+    _AppLanguage.russian: 'Введи код',
+  },
+  'Kod pojawi się tylko na moment': <_AppLanguage, String>{
+    _AppLanguage.english: 'The code appears only for a moment',
+    _AppLanguage.german: 'Der Code erscheint nur kurz',
+    _AppLanguage.ukrainian: "Код з'явиться лише на мить",
+    _AppLanguage.russian: 'Код появится только на мгновение',
+  },
+  'Następny kod': <_AppLanguage, String>{
+    _AppLanguage.english: 'Next code',
+    _AppLanguage.german: 'Nächster Code',
+    _AppLanguage.ukrainian: 'Наступний код',
+    _AppLanguage.russian: 'Следующий код',
+  },
+  'Nowy kod': <_AppLanguage, String>{
+    _AppLanguage.english: 'New code',
+    _AppLanguage.german: 'Neuer Code',
+    _AppLanguage.ukrainian: 'Новий код',
+    _AppLanguage.russian: 'Новый код',
+  },
+  'Wyjście z gry': <_AppLanguage, String>{
+    _AppLanguage.english: 'Exit game',
+    _AppLanguage.german: 'Spiel verlassen',
+    _AppLanguage.ukrainian: 'Вийти з гри',
+    _AppLanguage.russian: 'Выйти из игры',
+  },
+  'Wybierz słowa, które były na półce.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Select the words that were on the shelf.',
+    _AppLanguage.german: 'Wähle die Wörter, die im Regal waren.',
+    _AppLanguage.ukrainian: 'Вибери слова, які були на полиці.',
+    _AppLanguage.russian: 'Выбери слова, которые были на полке.',
+  },
+  'Półka rośnie. Wchodzisz na {count} i za chwilę leci następna.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'The shelf grows. You move to {count} and the next one starts soon.',
+        _AppLanguage.german:
+            'Das Regal wächst. Du gehst auf {count} und gleich startet das nächste.',
+        _AppLanguage.ukrainian:
+            'Полиця зростає. Переходиш на {count}, і скоро стартує наступна.',
+        _AppLanguage.russian:
+            'Полка растет. Переходишь на {count}, и скоро стартует следующая.',
+      },
+  'Maksimum osiągnięte. Trzymasz {count} i za chwilę leci następna półka.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Maximum reached. You hold {count} and the next shelf starts soon.',
+        _AppLanguage.german:
+            'Maximum erreicht. Du hältst {count} und gleich startet das nächste Regal.',
+        _AppLanguage.ukrainian:
+            'Досягнуто максимуму. Тримаєш {count}, і скоро стартує наступна полиця.',
+        _AppLanguage.russian:
+            'Максимум достигнут. Держишь {count}, и скоро стартует следующая полка.',
+      },
+  'Dobrze. Seria {progress}/{required} na tym poziomie, następna półka za chwilę.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Good. Streak {progress}/{required} on this level, next shelf soon.',
+        _AppLanguage.german:
+            'Gut. Serie {progress}/{required} auf diesem Level, nächstes Regal gleich.',
+        _AppLanguage.ukrainian:
+            'Добре. Серія {progress}/{required} на цьому рівні, наступна полиця скоро.',
+        _AppLanguage.russian:
+            'Хорошо. Серия {progress}/{required} на этом уровне, следующая полка скоро.',
+      },
+  'Dwie pomyłki. Wracasz do {count}.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Two mistakes. You return to {count}.',
+    _AppLanguage.german: 'Zwei Fehler. Du gehst zurück auf {count}.',
+    _AppLanguage.ukrainian: 'Дві помилки. Повертаєшся до {count}.',
+    _AppLanguage.russian: 'Две ошибки. Возврат к {count}.',
+  },
+  'To nie był ten zestaw. Postęp {progress}/{required}, błędy {mistakes}/2.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'That was not the set. Progress {progress}/{required}, mistakes {mistakes}/2.',
+        _AppLanguage.german:
+            'Das war nicht das Set. Fortschritt {progress}/{required}, Fehler {mistakes}/2.',
+        _AppLanguage.ukrainian:
+            'Це був не той набір. Прогрес {progress}/{required}, помилки {mistakes}/2.',
+        _AppLanguage.russian:
+            'Это был не тот набор. Прогресс {progress}/{required}, ошибки {mistakes}/2.',
+      },
+  'Słowa pojawią się tylko na chwilę': <_AppLanguage, String>{
+    _AppLanguage.english: 'Words appear only briefly',
+    _AppLanguage.german: 'Wörter erscheinen nur kurz',
+    _AppLanguage.ukrainian: "Слова з'являться лише на мить",
+    _AppLanguage.russian: 'Слова появятся только на мгновение',
+  },
+  'Następna półka': <_AppLanguage, String>{
+    _AppLanguage.english: 'Next shelf',
+    _AppLanguage.german: 'Nächstes Regal',
+    _AppLanguage.ukrainian: 'Наступна полиця',
+    _AppLanguage.russian: 'Следующая полка',
+  },
+  'Nowa półka': <_AppLanguage, String>{
+    _AppLanguage.english: 'New shelf',
+    _AppLanguage.german: 'Neues Regal',
+    _AppLanguage.ukrainian: 'Нова полиця',
+    _AppLanguage.russian: 'Новая полка',
+  },
+  'Sesja zrobiona': <_AppLanguage, String>{
+    _AppLanguage.english: 'Session done',
+    _AppLanguage.german: 'Sitzung erledigt',
+    _AppLanguage.ukrainian: 'Сесію завершено',
+    _AppLanguage.russian: 'Сессия завершена',
+  },
+  'Sesja została już zapisana jako wykonana. Możesz wrócić do listy.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'This session has already been saved as completed. You can return to the list.',
+        _AppLanguage.german:
+            'Diese Sitzung wurde bereits als abgeschlossen gespeichert. Du kannst zur Liste zurückkehren.',
+        _AppLanguage.ukrainian:
+            'Цю сесію вже збережено як виконану. Можеш повернутися до списку.',
+        _AppLanguage.russian:
+            'Эта сессия уже сохранена как выполненная. Можешь вернуться к списку.',
+      },
+  'Start gry zapisze to ćwiczenie automatycznie jako wykonane w tej sesji.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Starting the game will automatically save this exercise as completed in this session.',
+        _AppLanguage.german:
+            'Beim Start des Spiels wird diese Übung in dieser Sitzung automatisch als abgeschlossen gespeichert.',
+        _AppLanguage.ukrainian:
+            'Запуск гри автоматично збереже цю вправу як виконану в цій сесії.',
+        _AppLanguage.russian:
+            'Запуск игры автоматически сохранит это упражнение как выполненное в этой сессии.',
+      },
+  'Wróć': <_AppLanguage, String>{
+    _AppLanguage.english: 'Back',
+    _AppLanguage.german: 'Zurück',
+    _AppLanguage.ukrainian: 'Назад',
+    _AppLanguage.russian: 'Назад',
+  },
+  'Gotowe': <_AppLanguage, String>{
+    _AppLanguage.english: 'Done',
+    _AppLanguage.german: 'Fertig',
+    _AppLanguage.ukrainian: 'Готово',
+    _AppLanguage.russian: 'Готово',
+  },
+  'Bez limitu': <_AppLanguage, String>{
+    _AppLanguage.english: 'Unlimited',
+    _AppLanguage.german: 'Unbegrenzt',
+    _AppLanguage.ukrainian: 'Без ліміту',
+    _AppLanguage.russian: 'Без лимита',
+  },
+  'progres': <_AppLanguage, String>{
+    _AppLanguage.english: 'progress cycle',
+    _AppLanguage.german: 'Fortschritt',
+    _AppLanguage.ukrainian: 'прогрес',
+    _AppLanguage.russian: 'прогресс',
+  },
+  'progresy': <_AppLanguage, String>{
+    _AppLanguage.english: 'progress cycles',
+    _AppLanguage.german: 'Fortschritte',
+    _AppLanguage.ukrainian: 'прогреси',
+    _AppLanguage.russian: 'прогрессы',
+  },
+  'progresów': <_AppLanguage, String>{
+    _AppLanguage.english: 'progress cycles',
+    _AppLanguage.german: 'Fortschritte',
+    _AppLanguage.ukrainian: 'прогресів',
+    _AppLanguage.russian: 'прогрессов',
+  },
+  'wpis': <_AppLanguage, String>{
+    _AppLanguage.english: 'entry',
+    _AppLanguage.german: 'Eintrag',
+    _AppLanguage.ukrainian: 'запис',
+    _AppLanguage.russian: 'запись',
+  },
+  'wpisy': <_AppLanguage, String>{
+    _AppLanguage.english: 'entries',
+    _AppLanguage.german: 'Einträge',
+    _AppLanguage.ukrainian: 'записи',
+    _AppLanguage.russian: 'записи',
+  },
+  'wpisów': <_AppLanguage, String>{
+    _AppLanguage.english: 'entries',
+    _AppLanguage.german: 'Einträge',
+    _AppLanguage.ukrainian: 'записів',
+    _AppLanguage.russian: 'записей',
+  },
+  'Wybierz': <_AppLanguage, String>{
+    _AppLanguage.english: 'Choose',
+    _AppLanguage.german: 'Wählen',
+    _AppLanguage.ukrainian: 'Вибрати',
+    _AppLanguage.russian: 'Выбрать',
+  },
+  'Wybierz • {price}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Choose • {price}',
+    _AppLanguage.german: 'Wahlen • {price}',
+    _AppLanguage.ukrainian: 'Обрати • {price}',
+    _AppLanguage.russian: 'Выбрать • {price}',
+  },
+  'Wybrany': <_AppLanguage, String>{
+    _AppLanguage.english: 'Selected',
+    _AppLanguage.german: 'Ausgewählt',
+    _AppLanguage.ukrainian: 'Вибрано',
+    _AppLanguage.russian: 'Выбрано',
+  },
+  'Ukończono Progres': <_AppLanguage, String>{
+    _AppLanguage.english: 'Progress completed',
+    _AppLanguage.german: 'Fortschritt abgeschlossen',
+    _AppLanguage.ukrainian: 'Прогрес завершено',
+    _AppLanguage.russian: 'Прогресс завершен',
+  },
+  'Ukończono Pamięć': <_AppLanguage, String>{
+    _AppLanguage.english: 'Memory completed',
+    _AppLanguage.german: 'Gedächtnis abgeschlossen',
+    _AppLanguage.ukrainian: "Пам'ять завершено",
+    _AppLanguage.russian: 'Память завершена',
+  },
+  'Ukończono Wibrację': <_AppLanguage, String>{
+    _AppLanguage.english: 'Vibration completed',
+    _AppLanguage.german: 'Vibration abgeschlossen',
+    _AppLanguage.ukrainian: 'Вібрацію завершено',
+    _AppLanguage.russian: 'Вибрация завершена',
+  },
+  'Ukończono Trening': <_AppLanguage, String>{
+    _AppLanguage.english: 'Training completed',
+    _AppLanguage.german: 'Training abgeschlossen',
+    _AppLanguage.ukrainian: 'Тренування завершено',
+    _AppLanguage.russian: 'Тренировка завершена',
+  },
+  'Historia dnia': <_AppLanguage, String>{
+    _AppLanguage.english: 'Day history',
+    _AppLanguage.german: 'Tagesverlauf',
+    _AppLanguage.ukrainian: 'Історія дня',
+    _AppLanguage.russian: 'История дня',
+  },
+  'Kalendarz progresu': <_AppLanguage, String>{
+    _AppLanguage.english: 'Progress calendar',
+    _AppLanguage.german: 'Fortschrittskalender',
+    _AppLanguage.ukrainian: 'Календар прогресу',
+    _AppLanguage.russian: 'Календарь прогресса',
+  },
+  'Plan dnia': <_AppLanguage, String>{
+    _AppLanguage.english: 'Daily plan',
+    _AppLanguage.german: 'Tagesplan',
+    _AppLanguage.ukrainian: 'План дня',
+    _AppLanguage.russian: 'План дня',
+  },
+  'Ścieżka wejścia w rytm': <_AppLanguage, String>{
+    _AppLanguage.english: 'Rhythm entry path',
+    _AppLanguage.german: 'Einstieg in den Rhythmus',
+    _AppLanguage.ukrainian: 'Шлях входу в ритм',
+    _AppLanguage.russian: 'Путь входа в ритм',
+  },
+  'Ten zestaw prowadzi Cię od wyciszenia do pełnej gotowości poznawczej. Najpierw stabilizujesz uwagę, potem podnosisz tempo reakcji, a na końcu utrwalasz koncentrację w praktyce.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'This set leads you from calm focus to full cognitive readiness. First you stabilize attention, then increase reaction tempo, and finally reinforce concentration in practice.',
+        _AppLanguage.german:
+            'Dieses Set führt dich von Ruhe zu voller kognitiver Bereitschaft. Erst stabilisierst du die Aufmerksamkeit, dann erhöhst du das Reaktionstempo und festigst am Ende die Konzentration.',
+        _AppLanguage.ukrainian:
+            'Цей набір веде тебе від заспокоєння до повної когнітивної готовності. Спочатку ти стабілізуєш увагу, потім підвищуєш темп реакції, а наприкінці закріплюєш концентрацію.',
+        _AppLanguage.russian:
+            'Этот набор ведет тебя от спокойствия к полной когнитивной готовности. Сначала ты стабилизируешь внимание, затем повышаешь темп реакции и в конце закрепляешь концентрацию.',
+      },
+  '1. Reset bodźców': <_AppLanguage, String>{
+    _AppLanguage.english: '1. Stimulus reset',
+    _AppLanguage.german: '1. Reiz-Reset',
+    _AppLanguage.ukrainian: '1. Скидання стимулів',
+    _AppLanguage.russian: '1. Сброс стимулов',
+  },
+  '2. Aktywacja koncentracji': <_AppLanguage, String>{
+    _AppLanguage.english: '2. Focus activation',
+    _AppLanguage.german: '2. Aktivierung der Konzentration',
+    _AppLanguage.ukrainian: '2. Активація концентрації',
+    _AppLanguage.russian: '2. Активация концентрации',
+  },
+  '3. Utrwalenie efektu': <_AppLanguage, String>{
+    _AppLanguage.english: '3. Effect consolidation',
+    _AppLanguage.german: '3. Effekt festigen',
+    _AppLanguage.ukrainian: '3. Закріплення ефекту',
+    _AppLanguage.russian: '3. Закрепление эффекта',
+  },
+  '60 sekund spokojnej fiksacji wzroku, żeby wyciszyć chaos i wejść w stabilny fokus.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            '60 seconds of calm visual fixation to quiet chaos and enter stable focus.',
+        _AppLanguage.german:
+            '60 Sekunden ruhige Blickfixation, um das Chaos zu beruhigen und in stabilen Fokus zu kommen.',
+        _AppLanguage.ukrainian:
+            '60 секунд спокійної фіксації погляду, щоб прибрати хаос і увійти у стабільний фокус.',
+        _AppLanguage.russian:
+            '60 секунд спокойной фиксации взгляда, чтобы убрать хаос и войти в стабильный фокус.',
+      },
+  'Krótka sesja Flow Runner albo Split Decision podnosi czujność i skraca czas reakcji.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'A short Flow Runner or Split Decision session boosts alertness and shortens reaction time.',
+        _AppLanguage.german:
+            'Eine kurze Session in Flow Runner oder Split Decision steigert die Wachheit und verkürzt die Reaktionszeit.',
+        _AppLanguage.ukrainian:
+            'Коротка сесія Flow Runner або Split Decision підвищує пильність і скорочує час реакції.',
+        _AppLanguage.russian:
+            'Короткая сессия Flow Runner или Split Decision повышает внимательность и сокращает время реакции.',
+      },
+  'Lepsze wyczucie tempa, szybsze korekty i dłuższe utrzymanie flow.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Better pace feel, faster corrections, and longer flow retention.',
+        _AppLanguage.german:
+            'Besseres Tempogefühl, schnellere Korrekturen und längeres Flow-Halten.',
+        _AppLanguage.ukrainian:
+            'Краще відчуття темпу, швидші корекції та довше утримання потоку.',
+        _AppLanguage.russian:
+            'Лучшее чувство темпа, более быстрые корректировки и более долгое удержание потока.',
+      },
+  'Punkty {score}': <_AppLanguage, String>{
+    _AppLanguage.english: 'Points {score}',
+    _AppLanguage.german: 'Punkte {score}',
+    _AppLanguage.ukrainian: 'Бали {score}',
+    _AppLanguage.russian: 'Очки {score}',
+  },
+  '{minutes} min': <_AppLanguage, String>{
+    _AppLanguage.english: '{minutes} min',
+    _AppLanguage.german: '{minutes} Min',
+    _AppLanguage.ukrainian: '{minutes} хв',
+    _AppLanguage.russian: '{minutes} мин',
+  },
+  'Punkt Stały': <_AppLanguage, String>{
+    _AppLanguage.english: 'Steady Point',
+    _AppLanguage.german: 'Fixpunkt',
+    _AppLanguage.ukrainian: 'Стабільна точка',
+    _AppLanguage.russian: 'Стабильная точка',
+  },
+  'Jeden spokojny punkt w centrum. Trening prostego utrzymania wzroku i powrotu do środka.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'One calm point in the center. Training simple gaze holding and returning to center.',
+        _AppLanguage.german:
+            'Ein ruhiger Punkt in der Mitte. Training für einfaches Halten des Blicks und Zurückkehren zur Mitte.',
+        _AppLanguage.ukrainian:
+            'Одна спокійна точка в центрі. Тренування простого утримання погляду й повернення до центру.',
+        _AppLanguage.russian:
+            'Одна спокойная точка в центре. Тренировка простого удержания взгляда и возврата к центру.',
+      },
+  'Fiksacja': <_AppLanguage, String>{
+    _AppLanguage.english: 'Fixation',
+    _AppLanguage.german: 'Fixation',
+    _AppLanguage.ukrainian: 'Фіксація',
+    _AppLanguage.russian: 'Фиксация',
+  },
+  '2-10 min': <_AppLanguage, String>{
+    _AppLanguage.english: '2-10 min',
+    _AppLanguage.german: '2-10 Min',
+    _AppLanguage.ukrainian: '2-10 хв',
+    _AppLanguage.russian: '2-10 мин',
+  },
+  'Płynny pościg': <_AppLanguage, String>{
+    _AppLanguage.english: 'Smooth pursuit',
+    _AppLanguage.german: 'Sanfte Verfolgung',
+    _AppLanguage.ukrainian: 'Плавне стеження',
+    _AppLanguage.russian: 'Плавное слежение',
+  },
+  'Płynny Pościg': <_AppLanguage, String>{
+    _AppLanguage.english: 'Smooth Pursuit',
+    _AppLanguage.german: 'Sanfte Verfolgung',
+    _AppLanguage.ukrainian: 'Плавне стеження',
+    _AppLanguage.russian: 'Плавное слежение',
+  },
+  'Kropka płynie po różnych torach i trzeba śledzić ją samym wzrokiem, bez wyprzedzania ruchem głowy.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'The dot moves along different paths and you track it only with your eyes, without leading with head movement.',
+        _AppLanguage.german:
+            'Der Punkt bewegt sich auf verschiedenen Bahnen und du verfolgst ihn nur mit den Augen, ohne mit dem Kopf vorauszugehen.',
+        _AppLanguage.ukrainian:
+            'Точка рухається різними траєкторіями, і треба стежити лише очима, без випередження рухом голови.',
+        _AppLanguage.russian:
+            'Точка движется по разным траекториям, и нужно следить за ней только глазами, без опережения движением головы.',
+      },
+  'Śledzenie oka': <_AppLanguage, String>{
+    _AppLanguage.english: 'Eye tracking',
+    _AppLanguage.german: 'Augenverfolgung',
+    _AppLanguage.ukrainian: 'Стеження очима',
+    _AppLanguage.russian: 'Слежение глазами',
+  },
+  'Koło • 8 • zygzak': <_AppLanguage, String>{
+    _AppLanguage.english: 'Circle • 8 • zigzag',
+    _AppLanguage.german: 'Kreis • 8 • Zickzack',
+    _AppLanguage.ukrainian: 'Коло • 8 • зигзаг',
+    _AppLanguage.russian: 'Круг • 8 • зигзаг',
+  },
+  'Centrum i peryferia': <_AppLanguage, String>{
+    _AppLanguage.english: 'Center and periphery',
+    _AppLanguage.german: 'Zentrum und Peripherie',
+    _AppLanguage.ukrainian: 'Центр і периферія',
+    _AppLanguage.russian: 'Центр и периферия',
+  },
+  'Centrum i Peryferia': <_AppLanguage, String>{
+    _AppLanguage.english: 'Center and Periphery',
+    _AppLanguage.german: 'Zentrum und Peripherie',
+    _AppLanguage.ukrainian: 'Центр і Периферія',
+    _AppLanguage.russian: 'Центр и Периферия',
+  },
+  'Wzrok zostaje w środku, a reakcja wchodzi tylko wtedy, gdy po bokach mignie właściwy sygnał.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Your gaze stays in the center, and you react only when the correct cue flashes on the sides.',
+        _AppLanguage.german:
+            'Der Blick bleibt in der Mitte, und du reagierst nur, wenn an den Seiten das richtige Signal aufblitzt.',
+        _AppLanguage.ukrainian:
+            'Погляд залишається в центрі, а реакція включається лише тоді, коли збоку мигне правильний сигнал.',
+        _AppLanguage.russian:
+            'Взгляд остается в центре, а реакция включается только тогда, когда по бокам мелькнет правильный сигнал.',
+      },
+  'Uwaga peryferyjna': <_AppLanguage, String>{
+    _AppLanguage.english: 'Peripheral attention',
+    _AppLanguage.german: 'Periphere Aufmerksamkeit',
+    _AppLanguage.ukrainian: 'Периферійна увага',
+    _AppLanguage.russian: 'Периферическое внимание',
+  },
+  'Tap na bodziec': <_AppLanguage, String>{
+    _AppLanguage.english: 'Tap on cue',
+    _AppLanguage.german: 'Tippen bei Reiz',
+    _AppLanguage.ukrainian: 'Тап на сигнал',
+    _AppLanguage.russian: 'Тап на сигнал',
+  },
+  'Tor': <_AppLanguage, String>{
+    _AppLanguage.english: 'Track',
+    _AppLanguage.german: 'Bahn',
+    _AppLanguage.ukrainian: 'Траєкторія',
+    _AppLanguage.russian: 'Траектория',
+  },
+  'Mix 3': <_AppLanguage, String>{
+    _AppLanguage.english: 'Mix 3',
+    _AppLanguage.german: 'Mix 3',
+    _AppLanguage.ukrainian: 'Мікс 3',
+    _AppLanguage.russian: 'Микс 3',
+  },
+  'Reguła': <_AppLanguage, String>{
+    _AppLanguage.english: 'Rule',
+    _AppLanguage.german: 'Regel',
+    _AppLanguage.ukrainian: 'Правило',
+    _AppLanguage.russian: 'Правило',
+  },
+  'Tap tylko na jasny': <_AppLanguage, String>{
+    _AppLanguage.english: 'Tap bright only',
+    _AppLanguage.german: 'Nur bei hell tippen',
+    _AppLanguage.ukrainian: 'Тап лише на яскравий',
+    _AppLanguage.russian: 'Тап только на яркий',
+  },
+  'Trzymaj wzrok w środku. Tapnij tylko wtedy, gdy po boku mignie jasny sygnał i od razu wracaj uwagą do centrum.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Keep your gaze in the center. Tap only when a bright cue flashes at the side and immediately bring attention back to center.',
+        _AppLanguage.german:
+            'Halte den Blick in der Mitte. Tippe nur, wenn seitlich ein helles Signal aufblitzt, und bringe die Aufmerksamkeit sofort zurück zur Mitte.',
+        _AppLanguage.ukrainian:
+            'Тримай погляд у центрі. Тапай лише тоді, коли збоку мигне яскравий сигнал, і одразу повертай увагу до центру.',
+        _AppLanguage.russian:
+            'Держи взгляд в центре. Тапай только когда сбоку мелькнет яркий сигнал и сразу возвращай внимание в центр.',
+      },
+  'Trzymaj wzrok w środku.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Keep your gaze in the center.',
+    _AppLanguage.german: 'Halte den Blick in der Mitte.',
+    _AppLanguage.ukrainian: 'Тримай погляд у центрі.',
+    _AppLanguage.russian: 'Держи взгляд в центре.',
+  },
+  'Tapnij tylko przy jasnym błysku.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Tap only on bright flash.',
+    _AppLanguage.german: 'Tippe nur beim hellen Aufblitzen.',
+    _AppLanguage.ukrainian: 'Тапай лише при яскравому спалаху.',
+    _AppLanguage.russian: 'Тапай только при яркой вспышке.',
+  },
+  'Jasny błysk. Tapnij.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Bright flash. Tap.',
+    _AppLanguage.german: 'Helles Aufblitzen. Tippen.',
+    _AppLanguage.ukrainian: 'Яскравий спалах. Тап.',
+    _AppLanguage.russian: 'Яркая вспышка. Тап.',
+  },
+  'Wabik. Ignoruj i trzymaj środek.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Decoy. Ignore and hold center.',
+    _AppLanguage.german: 'Täuschreiz. Ignoriere und halte die Mitte.',
+    _AppLanguage.ukrainian: 'Приманка. Ігноруй і тримай центр.',
+    _AppLanguage.russian: 'Приманка. Игнорируй и держи центр.',
+  },
+  'Za późno. Wróć do środka.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Too late. Return to center.',
+    _AppLanguage.german: 'Zu spät. Zurück zur Mitte.',
+    _AppLanguage.ukrainian: 'Запізно. Повернись до центру.',
+    _AppLanguage.russian: 'Слишком поздно. Вернись в центр.',
+  },
+  'Wróć uwagą do centrum.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Bring attention back to center.',
+    _AppLanguage.german: 'Lenke die Aufmerksamkeit zurück zur Mitte.',
+    _AppLanguage.ukrainian: 'Поверни увагу до центру.',
+    _AppLanguage.russian: 'Верни внимание в центр.',
+  },
+  'Dobrze. Wracaj do centrum.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Good. Return to center.',
+    _AppLanguage.german: 'Gut. Zurück zur Mitte.',
+    _AppLanguage.ukrainian: 'Добре. Повернись до центру.',
+    _AppLanguage.russian: 'Хорошо. Вернись в центр.',
+  },
+  'To był wabik. Trzymaj środek.': <_AppLanguage, String>{
+    _AppLanguage.english: 'That was a decoy. Hold center.',
+    _AppLanguage.german: 'Das war ein Täuschreiz. Halte die Mitte.',
+    _AppLanguage.ukrainian: 'Це була приманка. Тримай центр.',
+    _AppLanguage.russian: 'Это была приманка. Держи центр.',
+  },
+  'Ustaw wzrok w centrum. Za chwilę zaczną wpadać bodźce z boków.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Set your gaze in the center. Side stimuli will start appearing shortly.',
+    _AppLanguage.german:
+        'Richte den Blick in der Mitte aus. Gleich kommen Reize von den Seiten.',
+    _AppLanguage.ukrainian:
+        'Налаштуй погляд у центрі. За мить почнуть зʼявлятися сигнали з боків.',
+    _AppLanguage.russian:
+        'Настрой взгляд в центре. Скоро начнут появляться сигналы по бокам.',
+  },
+  'Punkty {score} • trafione {hits} • pominięte {misses} • błędy {errors}':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Points {score} • hits {hits} • missed {misses} • errors {errors}',
+        _AppLanguage.german:
+            'Punkte {score} • Treffer {hits} • verpasst {misses} • Fehler {errors}',
+        _AppLanguage.ukrainian:
+            'Бали {score} • влучання {hits} • пропущено {misses} • помилки {errors}',
+        _AppLanguage.russian:
+            'Очки {score} • попадания {hits} • пропущено {misses} • ошибки {errors}',
+      },
+  'Pulse Sync, Sprint Czytania lub Drabina Pamięci wzmacniają pamięć roboczą i utrzymanie tempa. Progres zapisuje się automatycznie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Pulse Sync, Reading Sprint or Memory Ladder strengthen working memory and pace maintenance. Progress is saved automatically.',
+        _AppLanguage.german:
+            'Pulse Sync, Lesesprint oder Gedächtnisleiter stärken das Arbeitsgedächtnis und halten das Tempo. Fortschritt wird automatisch gespeichert.',
+        _AppLanguage.ukrainian:
+            'Pulse Sync, Reading Sprint або Memory Ladder зміцнюють робочу памʼять і утримання темпу. Прогрес зберігається автоматично.',
+        _AppLanguage.russian:
+            'Pulse Sync, Reading Sprint или Memory Ladder укрепляют рабочую память и удержание темпа. Прогресс сохраняется автоматически.',
+      },
+  'Mini-gry': <_AppLanguage, String>{
+    _AppLanguage.english: 'Mini games',
+    _AppLanguage.german: 'Mini-Spiele',
+    _AppLanguage.ukrainian: 'Міні-ігри',
+    _AppLanguage.russian: 'Мини-игры',
+  },
+  'System treningu koncentracji, decyzji i flow': <_AppLanguage, String>{
+    _AppLanguage.english: 'Concentration, decision and flow training system',
+    _AppLanguage.german:
+        'Trainingssystem für Konzentration, Entscheidungen und Flow',
+    _AppLanguage.ukrainian: 'Система тренування концентрації, рішень і потоку',
+    _AppLanguage.russian: 'Система тренировки концентрации, решений и потока',
+  },
+  'System treningu koncentracji,\ndecyzji i flow': <_AppLanguage, String>{
+    _AppLanguage.english: 'Concentration training system,\ndecisions and flow',
+    _AppLanguage.german:
+        'Trainingssystem für Konzentration,\nEntscheidungen und Flow',
+    _AppLanguage.ukrainian: 'Система тренування концентрації,\nрішень і потоку',
+    _AppLanguage.russian: 'Система тренировки концентрации,\nрешений и потока',
+  },
+  'System treningu': <_AppLanguage, String>{
+    _AppLanguage.english: 'Training system',
+    _AppLanguage.german: 'Trainingssystem',
+    _AppLanguage.ukrainian: 'Система тренування',
+    _AppLanguage.russian: 'Система тренировки',
+  },
+  'koncentracji': <_AppLanguage, String>{
+    _AppLanguage.english: 'concentration',
+    _AppLanguage.german: 'Konzentration',
+    _AppLanguage.ukrainian: 'концентрації',
+    _AppLanguage.russian: 'концентрации',
+  },
+  'decyzji i flow': <_AppLanguage, String>{
+    _AppLanguage.english: 'decisions and flow',
+    _AppLanguage.german: 'Entscheidungen und Flow',
+    _AppLanguage.ukrainian: 'рішень і потоку',
+    _AppLanguage.russian: 'решений и потока',
+  },
+  'Każda sesja ma prostą instrukcję, krótki czas i jeden konkretny efekt dla skupienia.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Each session has simple instructions, short duration and one clear focus effect.',
+        _AppLanguage.german:
+            'Jede Session hat eine einfache Anleitung, kurze Dauer und einen klaren Fokus-Effekt.',
+        _AppLanguage.ukrainian:
+            'Кожна сесія має просту інструкцію, короткий час і один конкретний ефект для концентрації.',
+        _AppLanguage.russian:
+            'Каждая сессия имеет простую инструкцию, короткое время и один конкретный эффект для концентрации.',
+      },
+  'W trakcie budowy': <_AppLanguage, String>{
+    _AppLanguage.english: 'In progress',
+    _AppLanguage.german: 'In Arbeit',
+    _AppLanguage.ukrainian: 'У розробці',
+    _AppLanguage.russian: 'В разработке',
+  },
+  'Następne sesje wkrótce': <_AppLanguage, String>{
+    _AppLanguage.english: 'Next sessions soon',
+    _AppLanguage.german: 'Nächste Sessions bald',
+    _AppLanguage.ukrainian: 'Наступні сесії скоро',
+    _AppLanguage.russian: 'Следующие сессии скоро',
+  },
+  'Następne sesje trafią do aplikacji w najbliższych aktualizacjach.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Next sessions will be added to the app in upcoming updates.',
+        _AppLanguage.german:
+            'Die nächsten Sessions kommen in den nächsten Updates in die App.',
+        _AppLanguage.ukrainian:
+            'Наступні сесії зʼявляться в додатку у найближчих оновленнях.',
+        _AppLanguage.russian:
+            'Следующие сессии появятся в приложении в ближайших обновлениях.',
+      },
+  'Dopracowujemy je tak, aby od razu były gotowe do regularnego treningu.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'We are polishing them so they are ready for regular training right away.',
+        _AppLanguage.german:
+            'Wir feilen daran, damit sie sofort für regelmäßiges Training bereit sind.',
+        _AppLanguage.ukrainian:
+            'Ми допрацьовуємо їх, щоб вони одразу були готові до регулярних тренувань.',
+        _AppLanguage.russian:
+            'Мы дорабатываем их, чтобы они сразу были готовы к регулярным тренировкам.',
+      },
+  'Subskrypcja odnawialna co miesiąc.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Subscription renews every month.',
+    _AppLanguage.german: 'Abonnement erneuert sich jeden Monat.',
+    _AppLanguage.ukrainian: 'Підписка поновлюється щомісяця.',
+    _AppLanguage.russian: 'Подписка обновляется каждый месяц.',
+  },
+  'Jednorazowo, bez odnawiania.': <_AppLanguage, String>{
+    _AppLanguage.english: 'One-time, no renewal.',
+    _AppLanguage.german: 'Einmalig, ohne Verlängerung.',
+    _AppLanguage.ukrainian: 'Разово, без поновлення.',
+    _AppLanguage.russian: 'Единоразово, без продления.',
+  },
+  'Czas trwania: 1 miesiąc': <_AppLanguage, String>{
+    _AppLanguage.english: 'Duration: 1 month',
+    _AppLanguage.german: 'Dauer: 1 Monat',
+    _AppLanguage.ukrainian: 'Тривалість: 1 місяць',
+    _AppLanguage.russian: 'Длительность: 1 месяц',
+  },
+  'Czas trwania: na zawsze': <_AppLanguage, String>{
+    _AppLanguage.english: 'Duration: forever',
+    _AppLanguage.german: 'Dauer: fur immer',
+    _AppLanguage.ukrainian: 'Тривалість: назавжди',
+    _AppLanguage.russian: 'Длительность: навсегда',
+  },
+  'Premium nieaktywne. Wybierz plan.': <_AppLanguage, String>{
+    _AppLanguage.english: 'Premium inactive. Choose a plan.',
+    _AppLanguage.german: 'Premium inaktiv. Wähle einen Plan.',
+    _AppLanguage.ukrainian: 'Преміум неактивний. Обери план.',
+    _AppLanguage.russian: 'Премиум неактивен. Выберите план.',
+  },
+  'Animacje': <_AppLanguage, String>{
+    _AppLanguage.english: 'Animations',
+    _AppLanguage.german: 'Animationen',
+    _AppLanguage.ukrainian: 'Анімації',
+    _AppLanguage.russian: 'Анимации',
+  },
+  'Tempo': <_AppLanguage, String>{
+    _AppLanguage.english: 'Tempo',
+    _AppLanguage.german: 'Tempo',
+    _AppLanguage.ukrainian: 'Темп',
+    _AppLanguage.russian: 'Темп',
+  },
+  'Energia': <_AppLanguage, String>{
+    _AppLanguage.english: 'Energy',
+    _AppLanguage.german: 'Energie',
+    _AppLanguage.ukrainian: 'Енергія',
+    _AppLanguage.russian: 'Энергия',
+  },
+  'Flow Runner': <_AppLanguage, String>{
+    _AppLanguage.english: 'Flow Runner',
+    _AppLanguage.german: 'Flow Runner',
+    _AppLanguage.ukrainian: 'Flow Runner',
+    _AppLanguage.russian: 'Flow Runner',
+  },
+  'Kula': <_AppLanguage, String>{
+    _AppLanguage.english: 'Orb',
+    _AppLanguage.german: 'Kugel',
+    _AppLanguage.ukrainian: 'Куля',
+  },
+  'Gwiazda': <_AppLanguage, String>{
+    _AppLanguage.english: 'Star',
+    _AppLanguage.german: 'Stern',
+    _AppLanguage.ukrainian: 'Зірка',
+  },
+  'Trójkąt': <_AppLanguage, String>{
+    _AppLanguage.english: 'Triangle',
+    _AppLanguage.german: 'Dreieck',
+    _AppLanguage.ukrainian: 'Трикутник',
+  },
+  'Walec': <_AppLanguage, String>{
+    _AppLanguage.english: 'Cylinder',
+    _AppLanguage.german: 'Zylinder',
+    _AppLanguage.ukrainian: 'Циліндр',
+  },
+  'Browar': <_AppLanguage, String>{
+    _AppLanguage.english: 'Brew',
+    _AppLanguage.german: 'Brauerei',
+    _AppLanguage.ukrainian: 'Бровар',
+  },
+  'Tryb': <_AppLanguage, String>{
+    _AppLanguage.english: 'Mode',
+    _AppLanguage.german: 'Modus',
+    _AppLanguage.ukrainian: 'Режим',
+    _AppLanguage.russian: 'Режим',
+  },
+  'Gra': <_AppLanguage, String>{
+    _AppLanguage.english: 'Game',
+    _AppLanguage.german: 'Spiel',
+    _AppLanguage.ukrainian: 'Гра',
+    _AppLanguage.russian: 'Игра',
+  },
+  'Ilość diamentów zebranych przez użytkownika': <_AppLanguage, String>{
+    _AppLanguage.english: 'Number of diamonds collected by the user',
+    _AppLanguage.german: 'Anzahl der vom Nutzer gesammelten Diamanten',
+    _AppLanguage.ukrainian: 'Кількість діамантів, зібраних користувачем',
+    _AppLanguage.russian: 'Количество алмазов, собранных пользователем',
+  },
+  'Jedna kropka na środku i czysta praktyka nieruchomej uwagi.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'One dot in the center and pure practice of steady attention.',
+        _AppLanguage.german:
+            'Ein Punkt in der Mitte und reine Übung stabiler Aufmerksamkeit.',
+        _AppLanguage.ukrainian:
+            'Одна точка в центрі та чиста практика нерухомої уваги.',
+        _AppLanguage.russian:
+            'Одна точка в центре и чистая практика неподвижного внимания.',
+      },
+  'Trzy poziomy konfliktu bodźców: podstawowa, średnia i hard.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Three levels of stimulus conflict: basic, medium and hard.',
+        _AppLanguage.german:
+            'Drei Stufen des Reizkonflikts: leicht, mittel und schwer.',
+        _AppLanguage.ukrainian:
+            'Три рівні конфлікту стимулів: базовий, середній і складний.',
+        _AppLanguage.russian:
+            'Три уровня конфликта стимулов: базовый, средний и сложный.',
+      },
+  'Go / no-go z rosnącym tempem i zasadami zmienianymi w locie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Go / no-go with increasing tempo and rules changed on the fly.',
+        _AppLanguage.german:
+            'Go/No-Go mit steigendem Tempo und Regeln, die laufend wechseln.',
+        _AppLanguage.ukrainian:
+            'Go / no-go зі зростаючим темпом і правилами, що змінюються на ходу.',
+        _AppLanguage.russian:
+            'Go / no-go с растущим темпом и правилами, меняющимися на ходу.',
+      },
+  'Pulsujące koło i rytmiczne tapnięcia do szybkiego wejścia w flow.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Pulsing circle and rhythmic taps to enter flow quickly.',
+        _AppLanguage.german:
+            'Pulsierender Kreis und rhythmische Taps für schnellen Flow-Einstieg.',
+        _AppLanguage.ukrainian:
+            'Пульсуюче коло і ритмічні натискання для швидкого входу в потік.',
+        _AppLanguage.russian:
+            'Пульсирующий круг и ритмичные нажатия для быстрого входа в поток.',
+      },
+  'Pojedyncze słowa lecą w szybkim rytmie z auto-przejściami.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Single words fly in a fast rhythm with auto transitions.',
+        _AppLanguage.german:
+            'Einzelne Wörter laufen im schnellen Rhythmus mit automatischen Übergängen.',
+        _AppLanguage.ukrainian:
+            'Окремі слова йдуть у швидкому ритмі з авто-переходами.',
+        _AppLanguage.russian:
+            'Отдельные слова идут в быстром ритме с автопереходами.',
+      },
+  'Trzy różne gry pamięciowe do treningu cyfr, słów i sekwencji.': <_AppLanguage, String>{
+    _AppLanguage.english:
+        'Three different memory games for training digits, words and sequences.',
+    _AppLanguage.german:
+        'Drei verschiedene Gedächtnisspiele für Zahlen, Wörter und Sequenzen.',
+    _AppLanguage.ukrainian:
+        'Три різні ігри на памʼять для тренування цифр, слів і послідовностей.',
+    _AppLanguage.russian:
+        'Три разные игры на память для тренировки цифр, слов и последовательностей.',
+  },
+  'Baza skojarzeń 0-100, szybki recall, sprint i serie cyfr.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Association base 0-100, quick recall, sprint and digit series.',
+        _AppLanguage.german:
+            'Assoziationsbasis 0-100, schneller Recall, Sprint und Zahlenserien.',
+        _AppLanguage.ukrainian:
+            "База асоціацій 0-100, швидкий recall, sprint і серії цифр.",
+        _AppLanguage.russian:
+            'База ассоциаций 0-100, быстрый recall, sprint и серии цифр.',
+      },
+  'Płynny ruch pod palcem, uniki i bonusy przy rosnącym tempie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'Smooth finger movement, dodges and bonuses with increasing pace.',
+        _AppLanguage.german:
+            'Flüssige Fingerbewegung, Ausweichen und Boni bei steigendem Tempo.',
+        _AppLanguage.ukrainian:
+            'Плавний рух під пальцем, ухилення і бонуси при зростаючому темпі.',
+        _AppLanguage.russian:
+            'Плавное движение под пальцем, уклонения и бонусы при растущем темпе.',
+      },
+  '2, 5 lub 10 min': <_AppLanguage, String>{
+    _AppLanguage.english: '2, 5 or 10 min',
+    _AppLanguage.german: '2, 5 oder 10 Min',
+    _AppLanguage.ukrainian: '2, 5 або 10 хв',
+    _AppLanguage.russian: '2, 5 или 10 мин',
+  },
+  '45 s na poziom': <_AppLanguage, String>{
+    _AppLanguage.english: '45 s per level',
+    _AppLanguage.german: '45 s pro Stufe',
+    _AppLanguage.ukrainian: '45 с на рівень',
+    _AppLanguage.russian: '45 с на уровень',
+  },
+  '2 min': <_AppLanguage, String>{
+    _AppLanguage.english: '2 min',
+    _AppLanguage.german: '2 Min',
+    _AppLanguage.ukrainian: '2 хв',
+    _AppLanguage.russian: '2 мин',
+  },
+  '1 min': <_AppLanguage, String>{
+    _AppLanguage.english: '1 min',
+    _AppLanguage.german: '1 Min',
+    _AppLanguage.ukrainian: '1 хв',
+    _AppLanguage.russian: '1 мин',
+  },
+  '4-5 min': <_AppLanguage, String>{
+    _AppLanguage.english: '4-5 min',
+    _AppLanguage.german: '4-5 Min',
+    _AppLanguage.ukrainian: '4-5 хв',
+    _AppLanguage.russian: '4-5 мин',
+  },
+  '4 min': <_AppLanguage, String>{
+    _AppLanguage.english: '4 min',
+    _AppLanguage.german: '4 Min',
+    _AppLanguage.ukrainian: '4 хв',
+    _AppLanguage.russian: '4 мин',
+  },
+  'Mapa 0-100': <_AppLanguage, String>{
+    _AppLanguage.english: 'Map 0-100',
+    _AppLanguage.german: 'Karte 0-100',
+    _AppLanguage.ukrainian: 'Карта 0-100',
+    _AppLanguage.russian: 'Карта 0-100',
+  },
+  'bez limitu': <_AppLanguage, String>{
+    _AppLanguage.english: 'unlimited',
+    _AppLanguage.german: 'ohne Limit',
+    _AppLanguage.ukrainian: 'без ліміту',
+    _AppLanguage.russian: 'без лимита',
+  },
+  'Przed głębokim skupieniem': <_AppLanguage, String>{
+    _AppLanguage.english: 'Before deep focus',
+    _AppLanguage.german: 'Vor tiefer Konzentration',
+    _AppLanguage.ukrainian: 'Перед глибокою концентрацією',
+    _AppLanguage.russian: 'Перед глубокой концентрацией',
+  },
+  'Gdy myśli skaczą': <_AppLanguage, String>{
+    _AppLanguage.english: 'When thoughts jump around',
+    _AppLanguage.german: 'Wenn Gedanken springen',
+    _AppLanguage.ukrainian: 'Коли думки стрибають',
+    _AppLanguage.russian: 'Когда мысли скачут',
+  },
+  'Gdy chcesz obudzić szybkość decyzji': <_AppLanguage, String>{
+    _AppLanguage.english: 'When you want to boost decision speed',
+    _AppLanguage.german:
+        'Wenn du die Entscheidungsgeschwindigkeit steigern willst',
+    _AppLanguage.ukrainian: 'Коли хочеш підвищити швидкість рішень',
+    _AppLanguage.russian: 'Когда хочешь ускорить принятие решений',
+  },
+  'Tuż przed zadaniem': <_AppLanguage, String>{
+    _AppLanguage.english: 'Right before a task',
+    _AppLanguage.german: 'Direkt vor der Aufgabe',
+    _AppLanguage.ukrainian: 'Прямо перед завданням',
+    _AppLanguage.russian: 'Прямо перед задачей',
+  },
+  'Przed nauką lub czytaniem': <_AppLanguage, String>{
+    _AppLanguage.english: 'Before studying or reading',
+    _AppLanguage.german: 'Vor Lernen oder Lesen',
+    _AppLanguage.ukrainian: 'Перед навчанням або читанням',
+    _AppLanguage.russian: 'Перед учебой или чтением',
+  },
+  'Codzienny trening': <_AppLanguage, String>{
+    _AppLanguage.english: 'Daily training',
+    _AppLanguage.german: 'Tägliches Training',
+    _AppLanguage.ukrainian: 'Щоденне тренування',
+    _AppLanguage.russian: 'Ежедневная тренировка',
+  },
+  'Przed nauką i powtórką': <_AppLanguage, String>{
+    _AppLanguage.english: 'Before learning and review',
+    _AppLanguage.german: 'Vor Lernen und Wiederholung',
+    _AppLanguage.ukrainian: 'Перед навчанням і повторенням',
+    _AppLanguage.russian: 'Перед изучением и повторением',
+  },
+  'Gdy chcesz wejść w rytm i refleks': <_AppLanguage, String>{
+    _AppLanguage.english: 'When you want rhythm and reflex',
+    _AppLanguage.german: 'Wenn du in Rhythmus und Reflex kommen willst',
+    _AppLanguage.ukrainian: 'Коли хочеш увійти в ритм і рефлекс',
+    _AppLanguage.russian: 'Когда хочешь войти в ритм и рефлекс',
+  },
+  'Płyniesz cały czas do przodu, omijasz przeszkody i zbierasz bonusy, a arena stopniowo przyspiesza. Nie ma tur ani limitu czasu, jest tylko ruch, rytm i szybkie korekty prowadzone palcem po ekranie.':
+      <_AppLanguage, String>{
+        _AppLanguage.english:
+            'You keep moving forward, dodge obstacles and collect bonuses while the arena gradually speeds up. There are no turns and no time limit, only movement, rhythm and quick finger-led corrections.',
+        _AppLanguage.german:
+            'Du bewegst dich ständig nach vorn, weichst Hindernissen aus und sammelst Boni, während die Arena allmählich schneller wird. Es gibt keine Runden und kein Zeitlimit, nur Bewegung, Rhythmus und schnelle Korrekturen mit dem Finger.',
+        _AppLanguage.ukrainian:
+            'Ти постійно рухаєшся вперед, оминаєш перешкоди та збираєш бонуси, а арена поступово пришвидшується. Немає раундів і ліміту часу - лише рух, ритм і швидкі корекції пальцем по екрану.',
+        _AppLanguage.russian:
+            'Ты постоянно двигаешься вперед, обходишь препятствия и собираешь бонусы, а арена постепенно ускоряется. Нет раундов и лимита времени - только движение, ритм и быстрые коррекции пальцем по экрану.',
+      },
+};
+
+String _localizedText(String text, _AppLanguage language) {
+  if (language == _AppLanguage.polish) {
+    return text;
+  }
+  final translations = _localizedTextMap[text];
+  if (translations == null) {
+    return text;
+  }
+  return translations[language] ?? text;
+}
+
+enum _PremiumPurchaseOutcome { success, canceled, failed, unavailable }
+
+class _PremiumPurchaseResult {
+  const _PremiumPurchaseResult({
+    required this.outcome,
+    this.planId,
+    this.message,
+  });
+
+  const _PremiumPurchaseResult.success({required String planId})
+    : this(outcome: _PremiumPurchaseOutcome.success, planId: planId);
+
+  const _PremiumPurchaseResult.canceled()
+    : this(outcome: _PremiumPurchaseOutcome.canceled);
+
+  const _PremiumPurchaseResult.failed([String? message])
+    : this(outcome: _PremiumPurchaseOutcome.failed, message: message);
+
+  const _PremiumPurchaseResult.unavailable([String? message])
+    : this(outcome: _PremiumPurchaseOutcome.unavailable, message: message);
+
+  final _PremiumPurchaseOutcome outcome;
+  final String? planId;
+  final String? message;
+}
+
+enum _MnemonicVaultUnlockOutcome { success, canceled, failed, unavailable }
+
+class _MnemonicVaultUnlockResult {
+  const _MnemonicVaultUnlockResult({required this.outcome, this.message});
+
+  const _MnemonicVaultUnlockResult.success()
+    : this(outcome: _MnemonicVaultUnlockOutcome.success);
+
+  const _MnemonicVaultUnlockResult.canceled()
+    : this(outcome: _MnemonicVaultUnlockOutcome.canceled);
+
+  const _MnemonicVaultUnlockResult.failed([String? message])
+    : this(outcome: _MnemonicVaultUnlockOutcome.failed, message: message);
+
+  const _MnemonicVaultUnlockResult.unavailable([String? message])
+    : this(outcome: _MnemonicVaultUnlockOutcome.unavailable, message: message);
+
+  final _MnemonicVaultUnlockOutcome outcome;
+  final String? message;
+}
+
+enum _MindeIdeasUnlockOutcome { success, canceled, failed, unavailable }
+
+class _MindeIdeasUnlockResult {
+  const _MindeIdeasUnlockResult({required this.outcome, this.message});
+
+  const _MindeIdeasUnlockResult.success()
+    : this(outcome: _MindeIdeasUnlockOutcome.success);
+
+  const _MindeIdeasUnlockResult.canceled()
+    : this(outcome: _MindeIdeasUnlockOutcome.canceled);
+
+  const _MindeIdeasUnlockResult.failed([String? message])
+    : this(outcome: _MindeIdeasUnlockOutcome.failed, message: message);
+
+  const _MindeIdeasUnlockResult.unavailable([String? message])
+    : this(outcome: _MindeIdeasUnlockOutcome.unavailable, message: message);
+
+  final _MindeIdeasUnlockOutcome outcome;
+  final String? message;
+}
+
+enum _DiamondPackPurchaseOutcome { success, canceled, failed, unavailable }
+
+class _DiamondPackPurchaseResult {
+  const _DiamondPackPurchaseResult({
+    required this.outcome,
+    this.amount,
+    this.message,
+  });
+
+  const _DiamondPackPurchaseResult.success({required int amount})
+    : this(outcome: _DiamondPackPurchaseOutcome.success, amount: amount);
+
+  const _DiamondPackPurchaseResult.canceled()
+    : this(outcome: _DiamondPackPurchaseOutcome.canceled);
+
+  const _DiamondPackPurchaseResult.failed([String? message])
+    : this(outcome: _DiamondPackPurchaseOutcome.failed, message: message);
+
+  const _DiamondPackPurchaseResult.unavailable([String? message])
+    : this(outcome: _DiamondPackPurchaseOutcome.unavailable, message: message);
+
+  final _DiamondPackPurchaseOutcome outcome;
+  final int? amount;
+  final String? message;
+}
+
+String _subscriptionPlanLabel(String? planId) {
+  switch (planId) {
+    case _subscriptionPlanInactive:
+      return _localizedText('Plan nieaktywny', _activeUiLanguage);
+    case _subscriptionPlanMonthly:
+      return _localizedText('25 zł / miesiąc', _activeUiLanguage);
+    case _subscriptionPlanLifetime:
+      return _localizedText('49 zł / na zawsze', _activeUiLanguage);
+    case _subscriptionPlanFreeTest:
+      return _localizedText('Free Premium (test)', _activeUiLanguage);
+    default:
+      return _localizedText('Nie wybrano planu', _activeUiLanguage);
+  }
+}
+
+int? _diamondPackAmountForProductId(String productId) {
+  switch (productId) {
+    case _flowRunnerDiamondPack50ProductId:
+      return 50;
+    case _flowRunnerDiamondPack100ProductId:
+      return 100;
+    case _flowRunnerDiamondPack500ProductId:
+      return 500;
+    default:
+      return null;
+  }
+}
+
+String? _diamondPackProductIdForAmount(int amount) {
+  switch (amount) {
+    case 50:
+      return _flowRunnerDiamondPack50ProductId;
+    case 100:
+      return _flowRunnerDiamondPack100ProductId;
+    case 500:
+      return _flowRunnerDiamondPack500ProductId;
+    default:
+      return null;
+  }
+}
+
+Future<bool> _isSubscriptionActive() async {
+  final prefs = await SharedPreferences.getInstance();
+  final planId =
+      prefs.getString(_subscriptionPlanPrefsKey) ?? _subscriptionPlanInactive;
+  final activeFlag = prefs.getBool(_subscriptionActivePrefsKey) ?? false;
+  return activeFlag && planId != _subscriptionPlanInactive;
+}
+
+Future<String?> _getSubscriptionPlan() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString(_subscriptionPlanPrefsKey) ??
+      _subscriptionPlanInactive;
+}
+
+Future<void> _setSubscriptionPlan(String planId) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(_subscriptionPlanPrefsKey, planId);
+  await prefs.setBool(
+    _subscriptionActivePrefsKey,
+    planId != _subscriptionPlanInactive,
+  );
+}
+
+bool get _supportsStorePurchases =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS);
+bool get _supportsGooglePlayPurchases =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+String? _planIdForProductId(String productId) {
+  switch (productId) {
+    case _monthlyPremiumProductId:
+      return _subscriptionPlanMonthly;
+    case _lifetimePremiumProductId:
+      return _subscriptionPlanLifetime;
+    default:
+      return null;
+  }
+}
+
+String? _productIdForPlanId(String planId) {
+  switch (planId) {
+    case _subscriptionPlanMonthly:
+      return _monthlyPremiumProductId;
+    case _subscriptionPlanLifetime:
+      return _lifetimePremiumProductId;
+    case _subscriptionPlanFreeTest:
+      return null;
+    default:
+      return null;
+  }
+}
+
+Future<void> _persistPremiumFromPurchase(PurchaseDetails purchase) async {
+  final planId = _planIdForProductId(purchase.productID);
+  if (planId == null) {
+    return;
+  }
+  await _setSubscriptionPlan(planId);
+}
+
+Future<_PremiumPurchaseResult> _startPremiumPurchase(String planId) async {
+  if (!_supportsStorePurchases) {
+    return const _PremiumPurchaseResult.unavailable(
+      'Zakupy Premium działają na Androidzie i iOS.',
+    );
+  }
+
+  final productId = _productIdForPlanId(planId);
+  if (productId == null) {
+    return const _PremiumPurchaseResult.failed('Nieznany plan premium.');
+  }
+
+  final iap = InAppPurchase.instance;
+  final isStoreAvailable = await iap.isAvailable();
+  if (!isStoreAvailable) {
+    return const _PremiumPurchaseResult.unavailable(
+      'Sklep jest chwilowo niedostępny. Spróbuj ponownie za chwilę.',
+    );
+  }
+
+  final productResponse = await iap.queryProductDetails(<String>{productId});
+  if (productResponse.error != null || productResponse.productDetails.isEmpty) {
+    return const _PremiumPurchaseResult.failed(
+      'Nie znaleziono produktu w Google Play. Sprawdź identyfikator produktu.',
+    );
+  }
+
+  final purchaseCompleter = Completer<_PremiumPurchaseResult>();
+  late final StreamSubscription<List<PurchaseDetails>> subscription;
+  subscription = iap.purchaseStream.listen(
+    (List<PurchaseDetails> purchases) async {
+      for (final purchase in purchases) {
+        if (!_premiumProductIds.contains(purchase.productID)) {
+          continue;
+        }
+
+        if (purchase.status == PurchaseStatus.pending) {
+          continue;
+        }
+
+        if (purchase.pendingCompletePurchase) {
+          await iap.completePurchase(purchase);
+        }
+
+        if (purchase.status == PurchaseStatus.purchased ||
+            purchase.status == PurchaseStatus.restored) {
+          await _persistPremiumFromPurchase(purchase);
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(
+              _PremiumPurchaseResult.success(
+                planId: _planIdForProductId(purchase.productID) ?? planId,
+              ),
+            );
+          }
+          return;
+        }
+
+        if (purchase.status == PurchaseStatus.canceled) {
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(const _PremiumPurchaseResult.canceled());
+          }
+          return;
+        }
+
+        if (purchase.status == PurchaseStatus.error) {
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(
+              _PremiumPurchaseResult.failed(
+                purchase.error?.message ??
+                    _localizedText('Zakup nie powiódł się.', _activeUiLanguage),
+              ),
+            );
+          }
+          return;
+        }
+      }
+    },
+    onError: (Object error) {
+      if (!purchaseCompleter.isCompleted) {
+        purchaseCompleter.complete(
+          _PremiumPurchaseResult.failed(
+            _localizedText(
+              'Błąd sklepu: {error}',
+              _activeUiLanguage,
+            ).replaceAll('{error}', '$error'),
+          ),
+        );
+      }
+    },
+  );
+
+  try {
+    final started = await iap.buyNonConsumable(
+      purchaseParam: PurchaseParam(
+        productDetails: productResponse.productDetails.first,
+      ),
+    );
+    if (!started) {
+      return const _PremiumPurchaseResult.failed(
+        'Nie udało się rozpocząć zakupu.',
+      );
+    }
+
+    return await purchaseCompleter.future.timeout(
+      const Duration(minutes: 2),
+      onTimeout: () => const _PremiumPurchaseResult.failed(
+        'Brak potwierdzenia zakupu. Sprawdź zakupy i spróbuj ponownie.',
+      ),
+    );
+  } finally {
+    await subscription.cancel();
+  }
+}
+
+Future<_DiamondPackPurchaseResult> _startDiamondPackPurchase(int amount) async {
+  if (!_supportsGooglePlayPurchases) {
+    return const _DiamondPackPurchaseResult.unavailable(
+      'Zakup pakietów diamentów działa na Androidzie przez Google Play.',
+    );
+  }
+
+  final productId = _diamondPackProductIdForAmount(amount);
+  if (productId == null) {
+    return const _DiamondPackPurchaseResult.failed(
+      'Nieznany pakiet diamentów.',
+    );
+  }
+
+  final iap = InAppPurchase.instance;
+  final isStoreAvailable = await iap.isAvailable();
+  if (!isStoreAvailable) {
+    return const _DiamondPackPurchaseResult.unavailable(
+      'Sklep Google Play jest chwilowo niedostępny.',
+    );
+  }
+
+  final response = await iap.queryProductDetails(<String>{productId});
+  if (response.error != null || response.productDetails.isEmpty) {
+    return const _DiamondPackPurchaseResult.failed(
+      'Nie znaleziono pakietu diamentów w Google Play Console.',
+    );
+  }
+
+  final purchaseCompleter = Completer<_DiamondPackPurchaseResult>();
+  late final StreamSubscription<List<PurchaseDetails>> subscription;
+  subscription = iap.purchaseStream.listen(
+    (List<PurchaseDetails> purchases) async {
+      for (final purchase in purchases) {
+        if (!_flowRunnerDiamondPackProductIds.contains(purchase.productID)) {
+          continue;
+        }
+
+        if (purchase.status == PurchaseStatus.pending) {
+          continue;
+        }
+
+        if (purchase.pendingCompletePurchase) {
+          await iap.completePurchase(purchase);
+        }
+
+        if (purchase.status == PurchaseStatus.purchased ||
+            purchase.status == PurchaseStatus.restored) {
+          final int purchasedAmount =
+              _diamondPackAmountForProductId(purchase.productID) ?? amount;
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(
+              _DiamondPackPurchaseResult.success(amount: purchasedAmount),
+            );
+          }
+          return;
+        }
+
+        if (purchase.status == PurchaseStatus.canceled) {
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(
+              const _DiamondPackPurchaseResult.canceled(),
+            );
+          }
+          return;
+        }
+
+        if (purchase.status == PurchaseStatus.error) {
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(
+              _DiamondPackPurchaseResult.failed(
+                purchase.error?.message ??
+                    _localizedText('Zakup nie powiódł się.', _activeUiLanguage),
+              ),
+            );
+          }
+          return;
+        }
+      }
+    },
+    onError: (Object error) {
+      if (!purchaseCompleter.isCompleted) {
+        purchaseCompleter.complete(
+          _DiamondPackPurchaseResult.failed(
+            _localizedText(
+              'Błąd sklepu: {error}',
+              _activeUiLanguage,
+            ).replaceAll('{error}', '$error'),
+          ),
+        );
+      }
+    },
+  );
+
+  try {
+    final started = await iap.buyConsumable(
+      purchaseParam: PurchaseParam(
+        productDetails: response.productDetails.first,
+      ),
+      autoConsume: true,
+    );
+    if (!started) {
+      return const _DiamondPackPurchaseResult.failed(
+        'Nie udało się rozpocząć zakupu.',
+      );
+    }
+
+    return await purchaseCompleter.future.timeout(
+      const Duration(minutes: 2),
+      onTimeout: () => const _DiamondPackPurchaseResult.failed(
+        'Brak potwierdzenia zakupu z Google Play. Spróbuj ponownie.',
+      ),
+    );
+  } finally {
+    await subscription.cancel();
+  }
+}
+
+Future<_MnemonicVaultUnlockResult> _startMnemonicVaultUnlockPurchase() async {
+  if (!_supportsGooglePlayPurchases) {
+    return const _MnemonicVaultUnlockResult.unavailable(
+      'Płatność działa na Androidzie przez Google Play.',
+    );
+  }
+
+  final iap = InAppPurchase.instance;
+  final isStoreAvailable = await iap.isAvailable();
+  if (!isStoreAvailable) {
+    return const _MnemonicVaultUnlockResult.unavailable(
+      'Sklep Google Play jest chwilowo niedostępny.',
+    );
+  }
+
+  final response = await iap.queryProductDetails(<String>{
+    _mnemonicVaultUnlockProductId,
+  });
+  if (response.error != null || response.productDetails.isEmpty) {
+    return const _MnemonicVaultUnlockResult.failed(
+      'Nie znaleziono produktu 50 zł w Google Play Console.',
+    );
+  }
+
+  final purchaseCompleter = Completer<_MnemonicVaultUnlockResult>();
+  late final StreamSubscription<List<PurchaseDetails>> subscription;
+  subscription = iap.purchaseStream.listen(
+    (List<PurchaseDetails> purchases) async {
+      for (final purchase in purchases) {
+        if (!_mnemonicVaultUnlockProductIds.contains(purchase.productID)) {
+          continue;
+        }
+
+        if (purchase.status == PurchaseStatus.pending) {
+          continue;
+        }
+
+        if (purchase.pendingCompletePurchase) {
+          await iap.completePurchase(purchase);
+        }
+
+        if (purchase.status == PurchaseStatus.purchased ||
+            purchase.status == PurchaseStatus.restored) {
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(
+              const _MnemonicVaultUnlockResult.success(),
+            );
+          }
+          return;
+        }
+
+        if (purchase.status == PurchaseStatus.canceled) {
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(
+              const _MnemonicVaultUnlockResult.canceled(),
+            );
+          }
+          return;
+        }
+
+        if (purchase.status == PurchaseStatus.error) {
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(
+              _MnemonicVaultUnlockResult.failed(
+                purchase.error?.message ??
+                    _localizedText('Zakup nie powiódł się.', _activeUiLanguage),
+              ),
+            );
+          }
+          return;
+        }
+      }
+    },
+    onError: (Object error) {
+      if (!purchaseCompleter.isCompleted) {
+        purchaseCompleter.complete(
+          _MnemonicVaultUnlockResult.failed(
+            _localizedText(
+              'Błąd sklepu: {error}',
+              _activeUiLanguage,
+            ).replaceAll('{error}', '$error'),
+          ),
+        );
+      }
+    },
+  );
+
+  try {
+    final started = await iap.buyNonConsumable(
+      purchaseParam: PurchaseParam(
+        productDetails: response.productDetails.first,
+      ),
+    );
+    if (!started) {
+      return const _MnemonicVaultUnlockResult.failed(
+        'Nie udało się rozpocząć zakupu.',
+      );
+    }
+
+    return await purchaseCompleter.future.timeout(
+      const Duration(minutes: 2),
+      onTimeout: () => const _MnemonicVaultUnlockResult.failed(
+        'Brak potwierdzenia zakupu z Google Play. Spróbuj ponownie.',
+      ),
+    );
+  } finally {
+    await subscription.cancel();
+  }
+}
+
+Future<_MindeIdeasUnlockResult> _startMindeIdeasUnlockPurchase() async {
+  if (!_supportsGooglePlayPurchases) {
+    return const _MindeIdeasUnlockResult.unavailable(
+      'Płatność działa na Androidzie przez Google Play.',
+    );
+  }
+
+  final iap = InAppPurchase.instance;
+  final isStoreAvailable = await iap.isAvailable();
+  if (!isStoreAvailable) {
+    return const _MindeIdeasUnlockResult.unavailable(
+      'Sklep Google Play jest chwilowo niedostępny.',
+    );
+  }
+
+  final response = await iap.queryProductDetails(<String>{
+    _mindeIdeasUnlockProductId,
+    _mindeIdeasUnlockLegacyProductId,
+  });
+  if (response.error != null || response.productDetails.isEmpty) {
+    return const _MindeIdeasUnlockResult.failed(
+      'Nie znaleziono produktu 25 zł w Google Play Console.',
+    );
+  }
+
+  final purchaseCompleter = Completer<_MindeIdeasUnlockResult>();
+  late final StreamSubscription<List<PurchaseDetails>> subscription;
+  subscription = iap.purchaseStream.listen(
+    (List<PurchaseDetails> purchases) async {
+      for (final purchase in purchases) {
+        if (!_mindeIdeasUnlockProductIds.contains(purchase.productID)) {
+          continue;
+        }
+
+        if (purchase.status == PurchaseStatus.pending) {
+          continue;
+        }
+
+        if (purchase.pendingCompletePurchase) {
+          await iap.completePurchase(purchase);
+        }
+
+        if (purchase.status == PurchaseStatus.purchased ||
+            purchase.status == PurchaseStatus.restored) {
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(const _MindeIdeasUnlockResult.success());
+          }
+          return;
+        }
+
+        if (purchase.status == PurchaseStatus.canceled) {
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(
+              const _MindeIdeasUnlockResult.canceled(),
+            );
+          }
+          return;
+        }
+
+        if (purchase.status == PurchaseStatus.error) {
+          if (!purchaseCompleter.isCompleted) {
+            purchaseCompleter.complete(
+              _MindeIdeasUnlockResult.failed(
+                purchase.error?.message ??
+                    _localizedText('Zakup nie powiódł się.', _activeUiLanguage),
+              ),
+            );
+          }
+          return;
+        }
+      }
+    },
+    onError: (Object error) {
+      if (!purchaseCompleter.isCompleted) {
+        purchaseCompleter.complete(
+          _MindeIdeasUnlockResult.failed(
+            _localizedText(
+              'Błąd sklepu: {error}',
+              _activeUiLanguage,
+            ).replaceAll('{error}', '$error'),
+          ),
+        );
+      }
+    },
+  );
+
+  try {
+    final started = await iap.buyNonConsumable(
+      purchaseParam: PurchaseParam(
+        productDetails: response.productDetails.first,
+      ),
+    );
+    if (!started) {
+      return const _MindeIdeasUnlockResult.failed(
+        'Nie udało się rozpocząć zakupu.',
+      );
+    }
+
+    return await purchaseCompleter.future.timeout(
+      const Duration(minutes: 2),
+      onTimeout: () => const _MindeIdeasUnlockResult.failed(
+        'Brak potwierdzenia zakupu z Google Play. Spróbuj ponownie.',
+      ),
+    );
+  } finally {
+    await subscription.cancel();
+  }
+}
+
+Future<bool> _ensureSubscriptionAccess(
+  BuildContext context, {
+  required String exerciseTitle,
+}) async {
+  final isActive = await _isSubscriptionActive();
+  if (isActive) {
+    return true;
+  }
+
+  if (!context.mounted) {
+    return false;
+  }
+
+  final palette = context.appPalette;
+  final theme = Theme.of(context);
+  final sheetBackgroundColor = Color.alphaBlend(
+    palette.surfaceStrong,
+    palette.backdropMiddle,
+  );
+  final sheetCardColor = Color.alphaBlend(
+    palette.surface,
+    sheetBackgroundColor,
+  );
+  final selectedPlanId = await showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    backgroundColor: sheetBackgroundColor,
+    builder: (BuildContext sheetContext) {
+      Widget buildPlanTile({
+        required String planId,
+        required String title,
+        required String subtitle,
+        required IconData icon,
+        required bool highlighted,
+      }) {
+        final baseColor = highlighted
+            ? const Color(0xFFD4A63A)
+            : palette.primaryText;
+        final titleColor = highlighted
+            ? const Color(0xFF2E2208)
+            : palette.primaryText;
+        final subtitleColor = highlighted
+            ? const Color(0xFF5A4311)
+            : palette.secondaryText;
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => Navigator.of(sheetContext).pop(planId),
+            child: Ink(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(
+                color: highlighted ? const Color(0xFFF0E2B9) : sheetCardColor,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: highlighted
+                      ? const Color(0xFFD4A63A)
+                      : palette.surfaceBorder,
+                ),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: highlighted
+                          ? const Color(0xFFE6D39D)
+                          : Color.alphaBlend(
+                              baseColor.withValues(alpha: 0.2),
+                              sheetCardColor,
+                            ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(icon, color: baseColor, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          context.tr(title),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: titleColor,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          context.tr(subtitle),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: subtitleColor,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: highlighted ? titleColor : palette.secondaryText,
+                    size: 16,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      return SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Center(
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2A2110),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFFD4A63A)),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.workspace_premium_rounded,
+                    color: Color(0xFFD4A63A),
+                    size: 30,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: Text(
+                  context.tr('MINDE Premium wymagane'),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: palette.primaryText,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                context.trf(
+                  'Aby uruchomić "{exerciseTitle}", aktywuj plan Premium.',
+                  <String, String>{'exerciseTitle': exerciseTitle},
+                ),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: palette.secondaryText,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 12),
+              buildPlanTile(
+                planId: _subscriptionPlanMonthly,
+                title: '25 zł / miesiąc',
+                subtitle: 'Stały dostęp do wszystkich gier premium.',
+                icon: Icons.calendar_month_rounded,
+                highlighted: false,
+              ),
+              const SizedBox(height: 10),
+              buildPlanTile(
+                planId: _subscriptionPlanLifetime,
+                title: '49 zł / na zawsze',
+                subtitle: 'Jednorazowa opłata i pełny dostęp bez końca.',
+                icon: Icons.workspace_premium_rounded,
+                highlighted: true,
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: palette.primaryText,
+                  ),
+                  icon: const Icon(Icons.close_rounded),
+                  label: Text(context.tr('Nie teraz')),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+
+  if (selectedPlanId == null) {
+    return false;
+  }
+
+  final purchaseResult = await _startPremiumPurchase(selectedPlanId);
+  if (!context.mounted) {
+    return false;
+  }
+  final messenger = ScaffoldMessenger.of(context);
+  if (purchaseResult.outcome == _PremiumPurchaseOutcome.success) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            context.trf('Premium aktywne: {plan}.', <String, String>{
+              'plan': context.tr(_subscriptionPlanLabel(purchaseResult.planId)),
+            }),
+          ),
+        ),
+      );
+    return true;
+  }
+
+  if (purchaseResult.outcome != _PremiumPurchaseOutcome.canceled) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr(
+              purchaseResult.message ?? 'Zakup premium nie powiódł się.',
+            ),
+          ),
+        ),
+      );
+  }
+  return false;
+}
 
 enum _AppThemeId { liquidGlass, liquidNight, graphite, ink, obsidian }
 
@@ -752,42 +6100,8 @@ _AppPalette _paletteForId(_AppThemeId id) {
   return _appPalettes.firstWhere((_AppPalette palette) => palette.id == id);
 }
 
-final _AppPalette _defaultAppPalette = _paletteForId(_AppThemeId.liquidGlass);
-const _AppBackdropId _defaultAppBackdropId = _AppBackdropId.warriorShield;
-
-_AppPalette _paletteFromStoredValue(String? value) {
-  final fallback = _defaultAppPalette;
-  if (value == null || value.isEmpty) {
-    return fallback;
-  }
-
-  if (value == 'ember' || value == 'forest') {
-    return _appPalettes.firstWhere(
-      (_AppPalette palette) => palette.id == _AppThemeId.obsidian,
-    );
-  }
-
-  for (final palette in _appPalettes) {
-    if (palette.id.name == value) {
-      return palette;
-    }
-  }
-  return fallback;
-}
-
-_AppBackdropId _backdropIdFromStoredValue(String? value) {
-  final fallback = _defaultAppBackdropId;
-  if (value == null || value.isEmpty) {
-    return fallback;
-  }
-
-  for (final definition in _appBackdropDefinitions) {
-    if (definition.id.name == value) {
-      return definition.id;
-    }
-  }
-  return fallback;
-}
+final _AppPalette _defaultAppPalette = _paletteForId(_AppThemeId.liquidNight);
+const _AppBackdropId _defaultAppBackdropId = _AppBackdropId.warriorSpears;
 
 Color _contrastingForeground(Color background) {
   return ThemeData.estimateBrightnessForColor(background) == Brightness.dark
@@ -1018,6 +6332,32 @@ class _AppThemeController extends ChangeNotifier {
   }
 }
 
+class _AppLanguageController extends ChangeNotifier {
+  _AppLanguageController({
+    required SharedPreferences? preferences,
+    required _AppLanguage initialLanguage,
+  }) : _preferences = preferences,
+       _language = initialLanguage {
+    _activeUiLanguage = initialLanguage;
+  }
+
+  final SharedPreferences? _preferences;
+  _AppLanguage _language;
+
+  _AppLanguage get language => _language;
+  Locale get locale => _language.locale;
+
+  Future<void> selectLanguage(_AppLanguage language) async {
+    if (language == _language) {
+      return;
+    }
+    _language = language;
+    _activeUiLanguage = language;
+    notifyListeners();
+    await _preferences?.setString(_appLanguagePrefsKey, language.code);
+  }
+}
+
 class _AppThemeScope extends InheritedNotifier<_AppThemeController> {
   const _AppThemeScope({
     required _AppThemeController controller,
@@ -1031,13 +6371,49 @@ class _AppThemeScope extends InheritedNotifier<_AppThemeController> {
   }
 }
 
+class _AppLanguageScope extends InheritedNotifier<_AppLanguageController> {
+  const _AppLanguageScope({
+    required _AppLanguageController controller,
+    required super.child,
+  }) : super(notifier: controller);
+
+  static _AppLanguageController of(BuildContext context) {
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_AppLanguageScope>();
+    assert(scope != null, 'Brak _AppLanguageScope w drzewie widgetów.');
+    return scope!.notifier!;
+  }
+
+  static _AppLanguageController? maybeOf(BuildContext context) {
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_AppLanguageScope>();
+    return scope?.notifier;
+  }
+}
+
 extension _AppThemeContext on BuildContext {
   _AppPalette get appPalette =>
       Theme.of(this).extension<_AppPalette>() ?? _appPalettes.first;
 
   _AppThemeController get appThemeController => _AppThemeScope.of(this);
+  _AppLanguageController get appLanguageController =>
+      _AppLanguageScope.of(this);
 
   _AppBackdropId get appBackdropId => appThemeController.backdropId;
+
+  String tr(String text) {
+    final language =
+        _AppLanguageScope.maybeOf(this)?.language ?? _activeUiLanguage;
+    return _localizedText(text, language);
+  }
+
+  String trf(String template, Map<String, String> params) {
+    var result = tr(template);
+    params.forEach((key, value) {
+      result = result.replaceAll('{$key}', value);
+    });
+    return result;
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -1056,6 +6432,7 @@ class MyApp extends StatelessWidget {
       preferences: null,
       initialPalette: _defaultAppPalette,
       initialBackdropId: _defaultAppBackdropId,
+      initialLanguage: _AppLanguage.polish,
       showLaunchExperience: showLaunchExperience,
       openAlarmSheetOnStart: openAlarmSheetOnStart,
     );
@@ -1067,6 +6444,7 @@ class _MyAppRoot extends StatefulWidget {
     required this.preferences,
     required this.initialPalette,
     required this.initialBackdropId,
+    required this.initialLanguage,
     this.showLaunchExperience = true,
     this.openAlarmSheetOnStart = false,
   });
@@ -1074,6 +6452,7 @@ class _MyAppRoot extends StatefulWidget {
   final SharedPreferences? preferences;
   final _AppPalette initialPalette;
   final _AppBackdropId initialBackdropId;
+  final _AppLanguage initialLanguage;
   final bool showLaunchExperience;
   final bool openAlarmSheetOnStart;
 
@@ -1083,6 +6462,7 @@ class _MyAppRoot extends StatefulWidget {
 
 class _MyAppState extends State<_MyAppRoot> {
   late final _AppThemeController _themeController;
+  late final _AppLanguageController _languageController;
 
   @override
   void initState() {
@@ -1092,35 +6472,54 @@ class _MyAppState extends State<_MyAppRoot> {
       initialPalette: widget.initialPalette,
       initialBackdropId: widget.initialBackdropId,
     );
+    _languageController = _AppLanguageController(
+      preferences: widget.preferences,
+      initialLanguage: widget.initialLanguage,
+    );
   }
 
   @override
   void dispose() {
     _themeController.dispose();
+    _languageController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _themeController,
+      animation: Listenable.merge(<Listenable>[
+        _themeController,
+        _languageController,
+      ]),
       builder: (BuildContext context, Widget? child) {
         final palette = _themeController.palette;
-        return _AppThemeScope(
-          controller: _themeController,
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            title: 'Minde',
-            theme: _buildAppTheme(palette),
-            home: widget.showLaunchExperience
-                ? AppLaunchGate(
-                    child: FlowHomePage(
+        return _AppLanguageScope(
+          controller: _languageController,
+          child: _AppThemeScope(
+            controller: _themeController,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              title: 'Minde',
+              locale: _languageController.locale,
+              supportedLocales: _appLanguages
+                  .map((language) => language.locale)
+                  .toList(growable: false),
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
+              theme: _buildAppTheme(palette),
+              themeAnimationDuration: const Duration(milliseconds: 420),
+              themeAnimationCurve: Curves.easeInOutCubic,
+              home: widget.showLaunchExperience
+                  ? AppLaunchGate(
+                      preferences: widget.preferences,
+                      child: FlowHomePage(
+                        openAlarmSheetOnStart: widget.openAlarmSheetOnStart,
+                      ),
+                    )
+                  : FlowHomePage(
                       openAlarmSheetOnStart: widget.openAlarmSheetOnStart,
                     ),
-                  )
-                : FlowHomePage(
-                    openAlarmSheetOnStart: widget.openAlarmSheetOnStart,
-                  ),
+            ),
           ),
         );
       },
@@ -1129,9 +6528,14 @@ class _MyAppState extends State<_MyAppRoot> {
 }
 
 class AppLaunchGate extends StatefulWidget {
-  const AppLaunchGate({super.key, required this.child});
+  const AppLaunchGate({
+    super.key,
+    required this.child,
+    required this.preferences,
+  });
 
   final Widget child;
+  final SharedPreferences? preferences;
 
   @override
   State<AppLaunchGate> createState() => _AppLaunchGateState();
@@ -1143,7 +6547,7 @@ class _AppLaunchGateState extends State<AppLaunchGate>
 
   late final AnimationController _animationController;
   Timer? _launchTimer;
-  bool _showHome = false;
+  _AppLaunchStep _step = _AppLaunchStep.animation;
 
   @override
   void initState() {
@@ -1158,7 +6562,7 @@ class _AppLaunchGateState extends State<AppLaunchGate>
       }
       _animationController.stop();
       setState(() {
-        _showHome = true;
+        _step = _AppLaunchStep.language;
       });
     });
   }
@@ -1172,18 +6576,41 @@ class _AppLaunchGateState extends State<AppLaunchGate>
 
   @override
   Widget build(BuildContext context) {
-    final Widget currentChild = _showHome
-        ? KeyedSubtree(
-            key: const ValueKey<String>('minde-home'),
-            child: widget.child,
-          )
-        : AnimatedBuilder(
-            key: const ValueKey<String>('minde-launch'),
-            animation: _animationController,
-            builder: (BuildContext context, Widget? child) {
-              return _MindeLaunchScreen(progress: _animationController.value);
-            },
+    final Widget currentChild = switch (_step) {
+      _AppLaunchStep.animation => AnimatedBuilder(
+        key: const ValueKey<String>('minde-launch'),
+        animation: _animationController,
+        builder: (BuildContext context, Widget? child) {
+          return _MindeLaunchScreen(progress: _animationController.value);
+        },
+      ),
+      _AppLaunchStep.language => _MindeLanguageSelectionScreen(
+        key: const ValueKey<String>('minde-language-selection'),
+        onContinue: () {
+          setState(() {
+            _step = _AppLaunchStep.intro;
+          });
+        },
+      ),
+      _AppLaunchStep.intro => _MindeFlowIntroScreen(
+        key: const ValueKey<String>('minde-flow-intro'),
+        onContinue: () {
+          unawaited(
+            widget.preferences?.setBool(
+              _launchExperienceCompletedPrefsKey,
+              true,
+            ),
           );
+          setState(() {
+            _step = _AppLaunchStep.home;
+          });
+        },
+      ),
+      _AppLaunchStep.home => KeyedSubtree(
+        key: const ValueKey<String>('minde-home'),
+        child: widget.child,
+      ),
+    };
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 650),
@@ -1193,6 +6620,378 @@ class _AppLaunchGateState extends State<AppLaunchGate>
         return FadeTransition(opacity: animation, child: child);
       },
       child: currentChild,
+    );
+  }
+}
+
+enum _AppLaunchStep { animation, language, intro, home }
+
+class _MindeLanguageSelectionScreen extends StatefulWidget {
+  const _MindeLanguageSelectionScreen({super.key, required this.onContinue});
+
+  final VoidCallback onContinue;
+
+  @override
+  State<_MindeLanguageSelectionScreen> createState() =>
+      _MindeLanguageSelectionScreenState();
+}
+
+class _MindeLanguageSelectionScreenState
+    extends State<_MindeLanguageSelectionScreen> {
+  late _AppLanguage _selectedLanguage;
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) {
+      return;
+    }
+    _initialized = true;
+    _selectedLanguage = context.appLanguageController.language;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          const AppBackdrop(),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[
+                  Colors.black.withValues(alpha: 0.28),
+                  Colors.black.withValues(alpha: 0.5),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F1A27).withValues(alpha: 0.82),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: const Color(0xFFB7D7FF).withValues(alpha: 0.45),
+                      ),
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(
+                          color: const Color(0xFF79A8E6).withValues(alpha: 0.2),
+                          blurRadius: 26,
+                          offset: const Offset(0, 12),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            context.tr(
+                              'W jakim języku chcesz otworzyć aplikację?',
+                            ),
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 88,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Center(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: _appLanguages
+                                    .map((_AppLanguage language) {
+                                      final selected =
+                                          _selectedLanguage == language;
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                        ),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(
+                                              18,
+                                            ),
+                                            onTap: () {
+                                              setState(() {
+                                                _selectedLanguage = language;
+                                              });
+                                              unawaited(
+                                                context.appLanguageController
+                                                    .selectLanguage(language),
+                                              );
+                                            },
+                                            child: AnimatedContainer(
+                                              duration: const Duration(
+                                                milliseconds: 220,
+                                              ),
+                                              width: 76,
+                                              height: 76,
+                                              alignment: Alignment.center,
+                                              decoration: BoxDecoration(
+                                                color: selected
+                                                    ? const Color(
+                                                        0xFF7DC2FF,
+                                                      ).withValues(alpha: 0.25)
+                                                    : const Color(
+                                                        0xFF0C1320,
+                                                      ).withValues(alpha: 0.45),
+                                                borderRadius:
+                                                    BorderRadius.circular(18),
+                                                border: Border.all(
+                                                  color: selected
+                                                      ? const Color(0xFF9ED5FF)
+                                                      : const Color(
+                                                          0xFFB7D7FF,
+                                                        ).withValues(
+                                                          alpha: 0.3,
+                                                        ),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                language.flag,
+                                                style: const TextStyle(
+                                                  fontSize: 36,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    })
+                                    .toList(growable: false),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton(
+                            onPressed: widget.onContinue,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF7DC2FF),
+                              foregroundColor: const Color(0xFF042039),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: Text(
+                              context.tr('Dalej'),
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF042039),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MindeFlowIntroScreen extends StatefulWidget {
+  const _MindeFlowIntroScreen({super.key, required this.onContinue});
+
+  final VoidCallback onContinue;
+
+  @override
+  State<_MindeFlowIntroScreen> createState() => _MindeFlowIntroScreenState();
+}
+
+class _MindeFlowIntroScreenState extends State<_MindeFlowIntroScreen> {
+  bool _accepted = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          const AppBackdrop(),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[
+                  Colors.black.withValues(alpha: 0.32),
+                  Colors.black.withValues(alpha: 0.5),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 840),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F1A27).withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: const Color(0xFFB7D7FF).withValues(alpha: 0.45),
+                      ),
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(
+                          color: const Color(0xFF79A8E6).withValues(alpha: 0.2),
+                          blurRadius: 26,
+                          offset: const Offset(0, 12),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFF8EC7FF,
+                                ).withValues(alpha: 0.18),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(
+                                    0xFF9DD2FF,
+                                  ).withValues(alpha: 0.36),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.auto_awesome_rounded,
+                                color: Color(0xFFD9EEFF),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                context.tr('Witaj w Minde'),
+                                style: theme.textTheme.headlineSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          context.tr(
+                            'Ta aplikacja została stworzona z myślą o osobach, które jeszcze nie wiedzą, jak wejść w stan flow i szukają czegoś, co sprawi, że życie stanie się pełniejsze.\n\nPotraktuj ją jak pożywienie dla „komputera w głowie”. Dawka, którą możesz tu otrzymać, to wstęp do budowania fundamentu, po którym wszystko zaczyna płynąć.\n\nNajważniejsze: powtarzaj codziennie, nie przestawaj i zanurz się w flow. Nawet gdy opanujesz ten stan, płyń dalej.\n\nWierzę w Ciebie, Drogi Użytkowniku, i życzę Ci powodzenia.',
+                          ),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: const Color(0xFFEAF5FF),
+                            fontWeight: FontWeight.w500,
+                            height: 1.5,
+                            fontFamilyFallback: const <String>[
+                              'Georgia',
+                              'Times New Roman',
+                              'serif',
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: <Widget>[
+                            Checkbox(
+                              value: _accepted,
+                              onChanged: (bool? value) {
+                                setState(() {
+                                  _accepted = value ?? false;
+                                });
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                context.tr(
+                                  'Czy akceptujesz zapisane informacje?',
+                                ),
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  color: const Color(0xFFEAF5FF),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton.icon(
+                            onPressed: _accepted ? widget.onContinue : null,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF7DC2FF),
+                              foregroundColor: const Color(0xFF042039),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            icon: const Icon(Icons.arrow_forward_rounded),
+                            label: Text(
+                              context.tr('Dalej'),
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF042039),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2054,6 +7853,19 @@ class ExerciseDefinition {
   final Color accent;
 }
 
+extension _ExerciseDefinitionLocalization on ExerciseDefinition {
+  String titleT(BuildContext context) => context.tr(title);
+  String subtitleT(BuildContext context) => context.tr(subtitle);
+  String durationT(BuildContext context) => context.tr(duration);
+  String idealMomentT(BuildContext context) => context.tr(idealMoment);
+  String outcomeT(BuildContext context) => context.tr(outcome);
+  String summaryT(BuildContext context) => context.tr(summary);
+  List<String> instructionsT(BuildContext context) =>
+      instructions.map(context.tr).toList(growable: false);
+  List<String> tagsT(BuildContext context) =>
+      tags.map(context.tr).toList(growable: false);
+}
+
 const List<ExerciseDefinition> exerciseDefinitions = <ExerciseDefinition>[
   ExerciseDefinition(
     kind: ExerciseKind.focusDot,
@@ -2172,7 +7984,7 @@ const List<ExerciseDefinition> exerciseDefinitions = <ExerciseDefinition>[
     duration: 'Mapa 0-100',
     idealMoment: 'Przed nauką i powtórką',
     outcome:
-        'Trzymasz stałą bazę skojarzeń i szybko sprawdzasz, czy odpowiedź wraca bez podpowiedzi.',
+        'Budujesz kontrolę w chaosie, szybciej wyłapujesz luki pamięciowe, wzmacniasz koncentrację i utrzymujesz płynny przepływ flow.',
     summary:
         'Ten box łączy stałą bazę cyfr 0-100 z trzema trybami pracy. Recall losuje liczbę i wymusza szybką reakcję Tak/Nie, sprint przewija po kolei cyfra + obraz, a seria cyfr pokazuje 10 rund sekwencji do zapamiętania i wpisania.',
     instructions: <String>[
@@ -2254,6 +8066,12 @@ class _FlowHomePageState extends State<FlowHomePage>
   bool _alarmSheetVisible = false;
   Timer? _goldenSecretTimer;
   bool _goldenSecretVisible = false;
+  bool _subscriptionActive = false;
+  String? _subscriptionPlanId;
+  bool _premiumPlanBoxExpanded = false;
+  bool _mnemonicVaultUnlocked = false;
+  bool _mindeIdeasUnlocked = false;
+  bool _lightBackgroundEnabled = false;
 
   @override
   void initState() {
@@ -2275,8 +8093,23 @@ class _FlowHomePageState extends State<FlowHomePage>
 
   bool get _mnemonicMorningCompletedToday => _mnemonicMorningCompletedCount > 0;
 
+  bool _countsForDailyProgress(ExerciseKind kind) {
+    if (kind == ExerciseKind.mnemonicVault && !_mnemonicVaultUnlocked) {
+      return false;
+    }
+    return true;
+  }
+
+  int get _dailyExerciseTarget => exerciseDefinitions
+      .where((ExerciseDefinition exercise) => _countsForDailyProgress(exercise.kind))
+      .length;
+
+  int get _completedDailyExercises => _completed
+      .where((ExerciseKind kind) => _countsForDailyProgress(kind))
+      .length;
+
   bool get _progressComplete =>
-      _completed.length == exerciseDefinitions.length &&
+      _completedDailyExercises >= _dailyExerciseTarget &&
       _currentCycleRecordId != null;
 
   int get _completedCyclesToday => _savedProgressEntries
@@ -2288,9 +8121,267 @@ class _FlowHomePageState extends State<FlowHomePage>
       .length;
 
   Future<void> _initializeHomeState() async {
+    await _loadMnemonicVaultUnlockState();
+    await _loadMindeIdeasUnlockState();
+    await _loadSubscriptionState();
     await _loadFlowProgress();
     await _loadMnemonicMorningReview();
     await _syncDailyHeroEntriesFromPrefs();
+  }
+
+  Future<void> _loadMnemonicVaultUnlockState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final unlocked = prefs.getBool(_mnemonicVaultUnlockedPrefsKey) ?? false;
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _mnemonicVaultUnlocked = unlocked;
+    });
+  }
+
+  Future<void> _loadMindeIdeasUnlockState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final unlocked = prefs.getBool(_mindeIdeasUnlockedPrefsKey) ?? false;
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _mindeIdeasUnlocked = unlocked;
+    });
+  }
+
+  Future<bool> _ensureMnemonicVaultUnlocked() async {
+    if (_mnemonicVaultUnlocked) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+
+    final theme = Theme.of(context);
+    const Color sheetPrimaryText = Color(0xFFEAF2FF);
+    const Color sheetSecondaryText = Color(0xFFAFC0D6);
+    const Color sheetPanelBorder = Color(0xFF5C728B);
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      showDragHandle: true,
+      barrierColor: Colors.black.withValues(alpha: 0.78),
+      backgroundColor: const Color(0xFF0B1622),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (BuildContext sheetContext) {
+        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+        return SafeArea(
+          top: false,
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF0B1622),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottomInset),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFFD4A63A,
+                          ).withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.lock_open_rounded,
+                          color: Color(0xFFD4A63A),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Sejf cyfr ∞',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: sheetPrimaryText,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    context.tr(
+                      'Aby otworzyć tę sekcję, wymagana jest jednorazowa opłata 50 zł.',
+                    ),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: sheetSecondaryText,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF152435),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: sheetPanelBorder),
+                    ),
+                    child: Text(
+                      context.tr('Odblokowanie sekcji: 50 zł (jednorazowo)'),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: sheetPrimaryText,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(
+                            sheetContext,
+                            rootNavigator: true,
+                          ).pop('later'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: sheetPrimaryText,
+                            side: const BorderSide(color: sheetPanelBorder),
+                          ),
+                          child: Text(context.tr('Nie teraz')),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () => Navigator.of(
+                            sheetContext,
+                            rootNavigator: true,
+                          ).pop('buy'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF4D77B2),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: Text(context.tr('Zapłać 50 zł')),
+                        ),
+                      ),
+                    ],
+                  ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) {
+      return false;
+    }
+
+    if (action != 'buy') {
+      return false;
+    }
+
+    final purchaseResult = await _startMnemonicVaultUnlockPurchase();
+
+    if (!mounted) {
+      return false;
+    }
+
+    if (purchaseResult.outcome != _MnemonicVaultUnlockOutcome.success) {
+      if (purchaseResult.outcome != _MnemonicVaultUnlockOutcome.canceled) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                context.tr(
+                  purchaseResult.message ?? 'Zakup 50 zł nie powiódł się.',
+                ),
+              ),
+            ),
+          );
+      }
+      return false;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_mnemonicVaultUnlockedPrefsKey, true);
+    if (!mounted) {
+      return false;
+    }
+
+    setState(() {
+      _mnemonicVaultUnlocked = true;
+    });
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr(
+              'Sejf cyfr ∞ odblokowany po potwierdzeniu zakupu 50 zł w Google Play.',
+            ),
+          ),
+        ),
+      );
+    return true;
+  }
+
+  Future<void> _openExercise(ExerciseDefinition exercise) async {
+    if (exercise.kind == ExerciseKind.mnemonicVault) {
+      final unlocked = await _ensureMnemonicVaultUnlocked();
+      if (!unlocked || !mounted) {
+        return;
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) {
+          return ExerciseDetailPage(
+            definition: exercise,
+            initialCompleted: _completed.contains(exercise.kind),
+            onCompletionChanged: (bool completed) {
+              _updateCompletion(exercise.kind, completed);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _loadSubscriptionState() async {
+    final isActive = await _isSubscriptionActive();
+    final planId = await _getSubscriptionPlan();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _subscriptionActive = isActive;
+      _subscriptionPlanId = planId;
+    });
   }
 
   int get _displayedCycleNumber {
@@ -2563,7 +8654,267 @@ class _FlowHomePageState extends State<FlowHomePage>
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _openMindeIdeasPage() {
+  Future<bool> _ensureMindeIdeasUnlocked() async {
+    if (_mindeIdeasUnlocked) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+
+    final theme = Theme.of(context);
+    const Color sheetPrimaryText = Color(0xFFEAF2FF);
+    const Color sheetSecondaryText = Color(0xFFAFC0D6);
+    const Color sheetPanelBorder = Color(0xFF5C728B);
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      showDragHandle: true,
+      barrierColor: Colors.black.withValues(alpha: 0.78),
+      backgroundColor: const Color(0xFF0B1622),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (BuildContext sheetContext) {
+        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+        return SafeArea(
+          top: false,
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF0B1622),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: AnimatedPadding(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottomInset),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFFD4A63A,
+                          ).withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.notes_rounded,
+                          color: Color(0xFFD4A63A),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          context.tr('Notatnik Premium'),
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: sheetPrimaryText,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    context.tr(
+                      'To miejsce na Twoje kategorie i notatki. Po odblokowaniu możesz wygodnie porządkować pomysły i szybko do nich wracać.',
+                    ),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: sheetSecondaryText,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF152435),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: sheetPanelBorder),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          context.tr('Kategorie'),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: sheetPrimaryText,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          context.tr(
+                            'Ułóż tematy pod siebie i trzymaj porządek.',
+                          ),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: sheetSecondaryText,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          context.tr('Notatki'),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: sheetPrimaryText,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          context.tr(
+                            'Zapisuj pomysły, checklisty i szybkie myśli w jednym miejscu.',
+                          ),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: sheetSecondaryText,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF152435),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: sheetPanelBorder),
+                    ),
+                    child: Text(
+                      context.tr('Koszt odblokowania: 25 zł (jednorazowo)'),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: sheetPrimaryText,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(
+                            sheetContext,
+                            rootNavigator: true,
+                          ).pop('later'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: sheetPrimaryText,
+                            side: const BorderSide(color: sheetPanelBorder),
+                          ),
+                          child: Text(context.tr('Nie teraz')),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () => Navigator.of(
+                            sheetContext,
+                            rootNavigator: true,
+                          ).pop('buy'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF4D77B2),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: Text(context.tr('Zapłać 25 zł')),
+                        ),
+                      ),
+                    ],
+                  ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) {
+      return false;
+    }
+
+    if (action != 'buy') {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              context.tr('Możesz odblokować Notatnik Premium później.'),
+            ),
+          ),
+        );
+      return false;
+    }
+
+    final purchaseResult = await _startMindeIdeasUnlockPurchase();
+
+    if (!mounted) {
+      return false;
+    }
+
+    if (purchaseResult.outcome != _MindeIdeasUnlockOutcome.success) {
+      if (purchaseResult.outcome != _MindeIdeasUnlockOutcome.canceled) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                purchaseResult.message ??
+                    context.tr('Zakup 25 zł nie powiódł się.'),
+              ),
+            ),
+          );
+      }
+      return false;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_mindeIdeasUnlockedPrefsKey, true);
+    if (!mounted) {
+      return false;
+    }
+
+    setState(() {
+      _mindeIdeasUnlocked = true;
+    });
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr(
+              'Notatnik Premium odblokowany po potwierdzeniu zakupu 25 zł w Google Play.',
+            ),
+          ),
+        ),
+      );
+    return true;
+  }
+
+  Future<void> _openMindeIdeasPage() async {
+    final unlocked = await _ensureMindeIdeasUnlocked();
+    if (!unlocked || !mounted) {
+      return;
+    }
+
     return Navigator.of(context).push<void>(
       _buildExerciseSessionRoute<void>(
         builder: (BuildContext context) {
@@ -2571,6 +8922,557 @@ class _FlowHomePageState extends State<FlowHomePage>
         },
       ),
     );
+  }
+
+  Future<void> _openLanguagePicker() async {
+    final palette = context.appPalette;
+    final languageController = context.appLanguageController;
+    final initialIndex = _appLanguages.indexOf(languageController.language);
+    var selectedIndex = initialIndex < 0 ? 0 : initialIndex;
+    final pageController = PageController(
+      initialPage: selectedIndex,
+      viewportFraction: 0.3,
+    );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Color.alphaBlend(
+        palette.surfaceStrong,
+        palette.backdropMiddle,
+      ),
+      builder: (BuildContext sheetContext) {
+        return StatefulBuilder(
+          builder:
+              (
+                BuildContext context,
+                void Function(void Function()) setModalState,
+              ) {
+                return DraggableScrollableSheet(
+                  expand: false,
+                  initialChildSize: 0.34,
+                  minChildSize: 0.26,
+                  maxChildSize: 0.52,
+                  builder:
+                      (
+                        BuildContext context,
+                        ScrollController scrollController,
+                      ) {
+                        return ListView(
+                          controller: scrollController,
+                          padding: const EdgeInsets.fromLTRB(18, 10, 18, 22),
+                          children: <Widget>[
+                            SizedBox(
+                              height: 120,
+                              child: PageView.builder(
+                                controller: pageController,
+                                itemCount: _appLanguages.length,
+                                onPageChanged: (int index) {
+                                  setModalState(() {
+                                    selectedIndex = index;
+                                  });
+                                  unawaited(
+                                    languageController.selectLanguage(
+                                      _appLanguages[index],
+                                    ),
+                                  );
+                                },
+                                itemBuilder: (BuildContext context, int index) {
+                                  final selected = index == selectedIndex;
+                                  return AnimatedScale(
+                                    duration: const Duration(milliseconds: 180),
+                                    curve: Curves.easeOutCubic,
+                                    scale: selected ? 1 : 0.84,
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        pageController.animateToPage(
+                                          index,
+                                          duration: const Duration(
+                                            milliseconds: 220,
+                                          ),
+                                          curve: Curves.easeOutCubic,
+                                        );
+                                        unawaited(
+                                          languageController.selectLanguage(
+                                            _appLanguages[index],
+                                          ),
+                                        );
+                                      },
+                                      child: Center(
+                                        child: AnimatedContainer(
+                                          duration: const Duration(
+                                            milliseconds: 180,
+                                          ),
+                                          width: selected ? 86 : 74,
+                                          height: selected ? 86 : 74,
+                                          decoration: BoxDecoration(
+                                            color: palette.surface.withValues(
+                                              alpha: selected ? 0.94 : 0.74,
+                                            ),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: selected
+                                                  ? palette.primaryButton
+                                                  : palette.surfaceBorder,
+                                              width: selected ? 2.2 : 1.2,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              _appLanguages[index].flag,
+                                              style: TextStyle(
+                                                fontSize: selected ? 40 : 32,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List<Widget>.generate(
+                                _appLanguages.length,
+                                (int index) {
+                                  final selected = index == selectedIndex;
+                                  return AnimatedContainer(
+                                    duration: const Duration(milliseconds: 180),
+                                    margin: EdgeInsets.only(
+                                      left: index == 0 ? 0 : 6,
+                                    ),
+                                    width: selected ? 20 : 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: selected
+                                          ? palette.primaryButton
+                                          : palette.surfaceBorder,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                );
+              },
+        );
+      },
+    );
+    pageController.dispose();
+  }
+
+  Future<void> _openSubscriptionSheet() async {
+    final theme = Theme.of(context);
+    final palette = context.appPalette;
+    final sheetBackgroundColor = Color.alphaBlend(
+      palette.surfaceStrong,
+      palette.backdropMiddle,
+    );
+    final sheetCardColor = Color.alphaBlend(
+      palette.surface,
+      sheetBackgroundColor,
+    );
+    final selectedPlanId = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: sheetBackgroundColor,
+      builder: (BuildContext sheetContext) {
+        Widget buildPlanBox({
+          required String planId,
+          required String title,
+          required String price,
+          required String subtitle,
+          required String durationLabel,
+          required List<String> perks,
+          required bool highlight,
+        }) {
+          final bool isSelected = _subscriptionPlanId == planId;
+          final borderColor = highlight
+              ? const Color(0xFFE24D4D)
+              : const Color(0xFFC43E3E);
+          final contentTextColor = const Color(0xFFE8F0FF);
+          final mutedTextColor = const Color(0xFFC6D0E4);
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => Navigator.of(sheetContext).pop(planId),
+              borderRadius: BorderRadius.circular(22),
+              child: Ink(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: <Color>[Color(0xFF183E67), Color(0xFF102D4B)],
+                  ),
+                  border: Border.all(
+                    color: isSelected ? palette.warning : borderColor,
+                    width: isSelected ? 2.2 : 1.5,
+                  ),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.star_rounded,
+                          color: palette.warning,
+                          size: 20,
+                        ),
+                        const Spacer(),
+                        if (isSelected)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: palette.warning.withValues(alpha: 0.22),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: palette.warning.withValues(alpha: 0.6),
+                              ),
+                            ),
+                            child: Text(
+                              'AKTYWNY',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: palette.warning,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ),
+                        if (!isSelected)
+                          Icon(
+                            Icons.star_rounded,
+                            color: palette.warning,
+                            size: 20,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: <Color>[Color(0xFFEF3F3F), Color(0xFFC61E1E)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFFFF8B8B).withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Text(
+                        title.toUpperCase(),
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: const Color(0xFFFFE08A),
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: mutedTextColor,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    for (final perk in perks) ...<Widget>[
+                      Row(
+                        children: <Widget>[
+                          Icon(
+                            Icons.star_rounded,
+                            color: palette.warning,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              perk,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: contentTextColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0E2741),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: palette.warning.withValues(alpha: 0.7),
+                              ),
+                            ),
+                            child: Text(
+                              price,
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: const Color(0xFFFFD978),
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0D1F34),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFF3A5F85),
+                              ),
+                            ),
+                            child: Text(
+                              durationLabel,
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: contentTextColor,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Aktywacja natychmiast po zakupie.',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: mutedTextColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Color.alphaBlend(
+                          palette.warning.withValues(alpha: 0.18),
+                          sheetBackgroundColor,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(
+                        Icons.workspace_premium_rounded,
+                        color: palette.warning,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            'MINDE Premium',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: palette.primaryText,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _subscriptionActive
+                                ? 'Subskrypcja jest już aktywna.'
+                                : 'Odblokuj dostęp do zablokowanych treningów.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: palette.secondaryText,
+                              height: 1.45,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: sheetCardColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    'Flow Runner, Sprint Czytania, Pulse Sync, Split Decision i Drabina Pamięci wymagają aktywnego planu Premium. Po zakupie od razu zagrasz.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: palette.primaryText,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const SizedBox(height: 10),
+                buildPlanBox(
+                  planId: _subscriptionPlanMonthly,
+                  title: 'Plan miesięczny',
+                  price: '25 zł / miesiąc',
+                  subtitle:
+                      'Elastyczna opcja dla osób, które chcą rozwijać fokus w miesięcznych cyklach.',
+                  durationLabel: 'Czas: 30 dni',
+                  perks: const <String>[
+                    'Pełny dostęp do wszystkich gier Premium.',
+                    'Nowe tryby odblokowywane od razu po wydaniu.',
+                    'Bez limitu sesji każdego dnia.',
+                  ],
+                  highlight: false,
+                ),
+                const SizedBox(height: 10),
+                buildPlanBox(
+                  planId: _subscriptionPlanLifetime,
+                  title: 'Plan na zawsze',
+                  price: '49 zł / na zawsze',
+                  subtitle:
+                      'Jednorazowy zakup dla osób, które chcą mieć Premium bez odnawiania.',
+                  durationLabel: 'Czas: bez limitu',
+                  perks: const <String>[
+                    'Stały dostęp do całej biblioteki Premium.',
+                    'Brak miesięcznych płatności i automatycznych odnowień.',
+                    'Priorytetowy dostęp do kolejnych dodatków.',
+                  ],
+                  highlight: true,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  !_subscriptionActive
+                      ? 'Premium nieaktywne. Wybierz plan, aby odblokować gry.'
+                      : 'Aktywny plan: ${_subscriptionPlanLabel(_subscriptionPlanId)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: !_subscriptionActive
+                        ? palette.secondaryText
+                        : palette.success,
+                    fontWeight: !_subscriptionActive
+                        ? FontWeight.w500
+                        : FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selectedPlanId == null) {
+      return;
+    }
+
+    await _activateSubscriptionPlan(selectedPlanId);
+  }
+
+  Future<void> _activateSubscriptionPlan(String planId) async {
+    if (planId == _subscriptionPlanFreeTest) {
+      await _setSubscriptionPlan(_subscriptionPlanFreeTest);
+      await _loadSubscriptionState();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              context.trf(
+                'Premium aktywne: {plan}. Możesz grać w gry premium.',
+                <String, String>{
+                  'plan': context.tr(
+                    _subscriptionPlanLabel(_subscriptionPlanFreeTest),
+                  ),
+                },
+              ),
+            ),
+          ),
+        );
+      return;
+    }
+
+    final purchaseResult = await _startPremiumPurchase(planId);
+    if (purchaseResult.outcome != _PremiumPurchaseOutcome.success) {
+      if (!mounted) {
+        return;
+      }
+      if (purchaseResult.outcome != _PremiumPurchaseOutcome.canceled) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                context.tr(
+                  purchaseResult.message ?? 'Zakup premium nie powiódł się.',
+                ),
+              ),
+            ),
+          );
+      }
+      return;
+    }
+
+    await _loadSubscriptionState();
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            context.trf(
+              'Premium aktywne: {plan}. Możesz grać w gry premium.',
+              <String, String>{
+                'plan': context.tr(
+                  _subscriptionPlanLabel(purchaseResult.planId),
+                ),
+              },
+            ),
+          ),
+        ),
+      );
   }
 
   String _formatAlarmTime(TimeOfDay time) {
@@ -2712,7 +9614,7 @@ class _FlowHomePageState extends State<FlowHomePage>
         _visibleCalendarMonth = DateTime(selectedDate.year, selectedDate.month);
       });
 
-      if (_completed.length == exerciseDefinitions.length &&
+      if (_completedDailyExercises >= _dailyExerciseTarget &&
           _currentCycleRecordId == null) {
         await _archiveCompletedProgress();
       }
@@ -2750,7 +9652,7 @@ class _FlowHomePageState extends State<FlowHomePage>
       }
 
       shouldArchiveCompletedProgress =
-          _completed.length == exerciseDefinitions.length &&
+          _completedDailyExercises >= _dailyExerciseTarget &&
           _currentCycleRecordId == null;
     });
 
@@ -3081,15 +9983,25 @@ class _FlowHomePageState extends State<FlowHomePage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = context.appPalette;
-    final progress = _completed.length / exerciseDefinitions.length;
+    final themeController = context.appThemeController;
+    final currentLanguage = context.appLanguageController.language;
+    const backgroundLayer = AppBackdrop();
+    final int dailyTarget = max(_dailyExerciseTarget, 1);
+    final progress = (_completedDailyExercises / dailyTarget).clamp(0.0, 1.0);
     final progressColor = _progressComplete ? palette.success : palette.warning;
     final selectedDateKey = _selectedCalendarDateKey ?? _todayKey;
     final selectedEntries = _entriesForDate(selectedDateKey);
     final progressCountByDate = _progressCountByDate;
     final calendarDays = _buildCalendarDays(_visibleCalendarMonth);
     final calendarSummary = selectedEntries.isEmpty
-        ? 'Brak zapisów.'
-        : '${_formatFlowLongDateLabel(selectedDateKey)} • ${selectedEntries.length} ${_formatFlowCalendarEntryCountLabel(selectedEntries.length)}';
+        ? context.tr('Brak zapisów.')
+        : context.trf('{date} • {count} {entries}', <String, String>{
+            'date': _formatFlowLongDateLabel(selectedDateKey),
+            'count': '${selectedEntries.length}',
+            'entries': context.tr(
+              _formatFlowCalendarEntryCountLabel(selectedEntries.length),
+            ),
+          });
 
     if (_goldenSecretVisible) {
       return Scaffold(
@@ -3097,7 +10009,7 @@ class _FlowHomePageState extends State<FlowHomePage>
         backgroundColor: Colors.transparent,
         body: Stack(
           children: <Widget>[
-            const AppBackdrop(),
+            backgroundLayer,
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: RadialGradient(
@@ -3118,7 +10030,7 @@ class _FlowHomePageState extends State<FlowHomePage>
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       Text(
-                        'Ta gra jest z myślą o tobie',
+                        context.tr('Ta gra jest z myślą o tobie'),
                         key: const ValueKey<String>('golden-secret-title'),
                         textAlign: TextAlign.center,
                         style: theme.textTheme.displaySmall?.copyWith(
@@ -3128,7 +10040,7 @@ class _FlowHomePageState extends State<FlowHomePage>
                       ),
                       const SizedBox(height: 18),
                       Text(
-                        'Jesteś Najlepszy',
+                        context.tr('Jesteś Najlepszy'),
                         key: const ValueKey<String>('golden-secret-subtitle'),
                         textAlign: TextAlign.center,
                         style: theme.textTheme.headlineMedium?.copyWith(
@@ -3147,11 +10059,9 @@ class _FlowHomePageState extends State<FlowHomePage>
     }
 
     return Scaffold(
-      drawer: const AppThemeDrawer(),
-      drawerEdgeDragWidth: 28,
       body: Stack(
         children: <Widget>[
-          const AppBackdrop(),
+          backgroundLayer,
           SafeArea(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -3164,17 +10074,100 @@ class _FlowHomePageState extends State<FlowHomePage>
                       Row(
                         children: <Widget>[
                           Expanded(
-                            child: Text(
-                              'Minde',
-                              style: theme.textTheme.displaySmall?.copyWith(
-                                color: palette.heroText,
+                            child: SizedBox(
+                              height: 52,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Text(
+                                        'Minde',
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        style: theme.textTheme.displaySmall
+                                            ?.copyWith(
+                                              color: _subscriptionActive
+                                                  ? const Color(0xFFD4A63A)
+                                                  : palette.heroText,
+                                            ),
+                                      ),
+                                      if (_subscriptionActive) ...<Widget>[
+                                        const SizedBox(width: 6),
+                                        const Icon(
+                                          Icons.workspace_premium_rounded,
+                                          color: Color(0xFFD4A63A),
+                                          size: 26,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                           ),
+                          IconButton.filled(
+                            onPressed: () async {
+                              final enableLightMode = !_lightBackgroundEnabled;
+                              if (enableLightMode) {
+                                await themeController.selectTheme(
+                                  _AppThemeId.liquidGlass,
+                                );
+                              } else {
+                                await themeController.selectTheme(
+                                  _AppThemeId.liquidNight,
+                                );
+                                await themeController.selectBackdrop(
+                                  _AppBackdropId.warriorSpears,
+                                );
+                              }
+                              if (!mounted) {
+                                return;
+                              }
+                              setState(() {
+                                _lightBackgroundEnabled = enableLightMode;
+                              });
+                            },
+                            tooltip: _lightBackgroundEnabled
+                                ? context.tr('Tryb jasny')
+                                : context.tr('Liquid Night'),
+                            style: IconButton.styleFrom(
+                              shape: const CircleBorder(),
+                              backgroundColor: palette.heroText.withValues(
+                                alpha: 0.12,
+                              ),
+                              foregroundColor: palette.heroText,
+                            ),
+                            icon: Icon(
+                              _lightBackgroundEnabled
+                                  ? Icons.nightlight_round
+                                  : Icons.wb_sunny_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton.filled(
+                            onPressed: _openLanguagePicker,
+                            tooltip: context.tr('Język'),
+                            style: IconButton.styleFrom(
+                              shape: const CircleBorder(),
+                              backgroundColor: palette.heroText.withValues(
+                                alpha: 0.12,
+                              ),
+                              foregroundColor: palette.heroText,
+                            ),
+                            icon: Text(
+                              currentLanguage.flag,
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
                           IconButton.filledTonal(
                             key: const ValueKey<String>('minde-ideas-open'),
                             onPressed: _openMindeIdeasPage,
-                            tooltip: 'Tarcza pomysłów',
+                            tooltip: context.tr('Tarcza pomysłów'),
                             style: IconButton.styleFrom(
                               backgroundColor: palette.heroText.withValues(
                                 alpha: 0.12,
@@ -3191,14 +10184,15 @@ class _FlowHomePageState extends State<FlowHomePage>
                           style: theme.textTheme.bodyLarge?.copyWith(
                             color: palette.heroMutedText,
                           ),
-                          children: const <InlineSpan>[
+                          children: <InlineSpan>[
                             TextSpan(
                               text: '"',
                               style: TextStyle(color: Color(0xFFD4A63A)),
                             ),
                             TextSpan(
-                              text:
-                                  'To, co czuję jako zatrzymanie, to moment, w którym mózg buduje połączenia — a flow pojawi się, gdy staną się automatyczne.',
+                              text: context.tr(
+                                'To, co czuję jako zatrzymanie, to moment, w którym mózg buduje połączenia — a flow pojawi się, gdy staną się automatyczne.',
+                              ),
                             ),
                             TextSpan(
                               text: '"',
@@ -3208,43 +10202,9 @@ class _FlowHomePageState extends State<FlowHomePage>
                         ),
                       ),
                       const SizedBox(height: 24),
-                      IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            Expanded(
-                              child: MnemonicMorningReviewMetric(
-                                isFlipped: _mnemonicMorningCardFlipped,
-                                completedCount: _mnemonicMorningCompletedCount,
-                                dailyTarget: _mnemonicMorningDailyTarget,
-                                showCompletionPrompt:
-                                    _mnemonicMorningShowCompletionPrompt,
-                                onFlip: _toggleMnemonicMorningCard,
-                                onLongPress: _resetMnemonicMorningReview,
-                                onMarkCompleted:
-                                    _markMnemonicMorningReviewCompleted,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: HeroStrawMetric(
-                                onProgressChanged:
-                                    _syncDailyHeroEntriesFromPrefs,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: HeroTrainingMetric(
-                                onProgressChanged:
-                                    _syncDailyHeroEntriesFromPrefs,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                       const SizedBox(height: 20),
                       Text(
-                        'Dzisiejszy progres',
+                        context.tr('Dzisiejszy progres'),
                         style: theme.textTheme.titleMedium?.copyWith(
                           color: palette.heroText,
                           fontWeight: FontWeight.w700,
@@ -3252,7 +10212,9 @@ class _FlowHomePageState extends State<FlowHomePage>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Aktywny cykl $_displayedCycleNumber',
+                        context.trf('Aktywny cykl {cycle}', <String, String>{
+                          'cycle': '$_displayedCycleNumber',
+                        }),
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: palette.heroMutedText,
                           fontWeight: FontWeight.w700,
@@ -3287,7 +10249,7 @@ class _FlowHomePageState extends State<FlowHomePage>
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Progres ukończono',
+                                    context.tr('Progres ukończono'),
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       color: palette.success,
                                       fontWeight: FontWeight.w800,
@@ -3296,7 +10258,13 @@ class _FlowHomePageState extends State<FlowHomePage>
                                 ],
                               )
                             : Text(
-                                '${_completed.length} z ${exerciseDefinitions.length} ćwiczeń oznaczone jako wykonane',
+                                context.trf(
+                                  '{done} z {total} ćwiczeń oznaczone jako wykonane',
+                                  <String, String>{
+                                    'done': '$_completedDailyExercises',
+                                    'total': '$dailyTarget',
+                                  },
+                                ),
                                 key: const ValueKey<String>(
                                   'flow-progress-active',
                                 ),
@@ -3308,7 +10276,17 @@ class _FlowHomePageState extends State<FlowHomePage>
                       if (_completedCyclesToday > 0) ...<Widget>[
                         const SizedBox(height: 8),
                         Text(
-                          'Dzisiaj ukończono już $_completedCyclesToday ${_formatFlowProgressCountLabel(_completedCyclesToday)}.',
+                          context.trf(
+                            'Dzisiaj ukończono już {count} {word}.',
+                            <String, String>{
+                              'count': '$_completedCyclesToday',
+                              'word': context.tr(
+                                _formatFlowProgressCountLabel(
+                                  _completedCyclesToday,
+                                ),
+                              ),
+                            },
+                          ),
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: palette.heroMutedText,
                           ),
@@ -3326,10 +10304,384 @@ class _FlowHomePageState extends State<FlowHomePage>
                             foregroundColor: palette.onSuccess,
                           ),
                           icon: const Icon(Icons.replay_rounded),
-                          label: const Text('Rozpocznij kolejny progres'),
+                          label: Text(context.tr('Rozpocznij kolejny progres')),
                         ),
                       ],
                     ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                SurfaceCard(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 720),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: <Widget>[
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(18),
+                              onTap: () {
+                                setState(() {
+                                  _premiumPlanBoxExpanded =
+                                      !_premiumPlanBoxExpanded;
+                                });
+                              },
+                              child: Ink(
+                                width: double.infinity,
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  14,
+                                  16,
+                                  14,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _subscriptionActive
+                                      ? palette.surface.withValues(alpha: 0.78)
+                                      : palette.surfaceStrong.withValues(
+                                          alpha: 0.88,
+                                        ),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: _subscriptionActive
+                                        ? const Color(
+                                            0xFFD4A63A,
+                                          ).withValues(alpha: 0.55)
+                                        : palette.surfaceBorder.withValues(
+                                            alpha: 0.95,
+                                          ),
+                                    width: _subscriptionActive ? 1.0 : 1.2,
+                                  ),
+                                  boxShadow: _subscriptionActive
+                                      ? null
+                                      : <BoxShadow>[
+                                          BoxShadow(
+                                            color: palette.shadowColor
+                                                .withValues(alpha: 0.22),
+                                            blurRadius: _premiumPlanBoxExpanded
+                                                ? 18
+                                                : 12,
+                                            offset: const Offset(0, 6),
+                                          ),
+                                        ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Stack(
+                                      children: <Widget>[
+                                        Align(
+                                          alignment: Alignment.center,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: <Widget>[
+                                              if (_subscriptionActive) ...<
+                                                Widget
+                                              >[
+                                                const Icon(
+                                                  Icons
+                                                      .workspace_premium_rounded,
+                                                  color: Color(0xFFD4A63A),
+                                                  size: 20,
+                                                ),
+                                                const SizedBox(width: 8),
+                                              ],
+                                              Text(
+                                                _subscriptionActive
+                                                    ? context.tr(
+                                                        'MINDE PREMIUM',
+                                                      )
+                                                    : context.tr(
+                                                        'Plan nieaktywny',
+                                                      ),
+                                                textAlign: TextAlign.center,
+                                                style: theme
+                                                    .textTheme
+                                                    .labelLarge
+                                                    ?.copyWith(
+                                                      color: _subscriptionActive
+                                                          ? const Color(
+                                                              0xFFD4A63A,
+                                                            )
+                                                          : palette
+                                                                .secondaryText,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      letterSpacing:
+                                                          _subscriptionActive
+                                                          ? 1.2
+                                                          : 0.2,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: Icon(
+                                            _premiumPlanBoxExpanded
+                                                ? Icons
+                                                      .keyboard_arrow_up_rounded
+                                                : Icons
+                                                      .keyboard_arrow_down_rounded,
+                                            color: palette.primaryText,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (!_subscriptionActive) ...<Widget>[
+                                      const SizedBox(height: 10),
+                                      AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 220,
+                                        ),
+                                        curve: Curves.easeOutCubic,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 9,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: palette.surface.withValues(
+                                            alpha: _premiumPlanBoxExpanded
+                                                ? 0.88
+                                                : 0.74,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: palette.surfaceBorder,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: <Widget>[
+                                            Icon(
+                                              Icons.lock_outline_rounded,
+                                              color: palette.secondaryText,
+                                              size: 18,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Flexible(
+                                              child: Text(
+                                                context.tr('Plan nieaktywny'),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
+                                                style: theme
+                                                    .textTheme
+                                                    .labelLarge
+                                                    ?.copyWith(
+                                                      color:
+                                                          palette.primaryText,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    AnimatedSize(
+                                      duration: const Duration(
+                                        milliseconds: 180,
+                                      ),
+                                      curve: Curves.easeOut,
+                                      child: !_premiumPlanBoxExpanded
+                                          ? const SizedBox.shrink()
+                                          : Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 12,
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: <Widget>[
+                                                  Text(
+                                                    context.tr(
+                                                      'Oferty subskrypcji',
+                                                    ),
+                                                    style: theme
+                                                        .textTheme
+                                                        .labelLarge
+                                                        ?.copyWith(
+                                                          color: palette
+                                                              .primaryText,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                  ),
+                                                  const SizedBox(height: 10),
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 7,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: _subscriptionActive
+                                                          ? palette.success
+                                                                .withValues(
+                                                                  alpha: 0.12,
+                                                                )
+                                                          : palette.surface
+                                                                .withValues(
+                                                                  alpha: 0.65,
+                                                                ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            999,
+                                                          ),
+                                                      border: Border.all(
+                                                        color:
+                                                            _subscriptionActive
+                                                            ? palette.success
+                                                                  .withValues(
+                                                                    alpha: 0.45,
+                                                                  )
+                                                            : palette
+                                                                  .surfaceBorder,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      _subscriptionActive
+                                                          ? context.tr(
+                                                              'Aktywny plan premium',
+                                                            )
+                                                          : context.tr(
+                                                              'Premium nieaktywne - wybierz plan',
+                                                            ),
+                                                      style: theme
+                                                          .textTheme
+                                                          .labelLarge
+                                                          ?.copyWith(
+                                                            color:
+                                                                _subscriptionActive
+                                                                ? palette
+                                                                      .success
+                                                                : palette
+                                                                      .secondaryText,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  Text(
+                                                    context.tr(
+                                                      'Kup plan i odblokuj gry premium: Flow Runner, Sprint Czytania, Pulse Sync, Split Decision oraz Drabina Pamięci.',
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                    style: theme
+                                                        .textTheme
+                                                        .bodyLarge
+                                                        ?.copyWith(
+                                                          color: palette
+                                                              .primaryText,
+                                                          height: 1.45,
+                                                        ),
+                                                  ),
+                                                  const SizedBox(height: 18),
+                                                  const SizedBox(height: 2),
+                                                  _PremiumPlanTile(
+                                                    icon: Icons
+                                                        .calendar_month_rounded,
+                                                    title: '25 zł / miesiąc',
+                                                    subtitle:
+                                                        'Subskrypcja odnawialna co miesiąc.',
+                                                    durationLabel:
+                                                        'Czas trwania: 1 miesiąc',
+                                                    selected:
+                                                        _subscriptionPlanId ==
+                                                        _subscriptionPlanMonthly,
+                                                    onPressed: () =>
+                                                        _activateSubscriptionPlan(
+                                                          _subscriptionPlanMonthly,
+                                                        ),
+                                                    buttonLabel:
+                                                        _subscriptionPlanId ==
+                                                            _subscriptionPlanMonthly
+                                                        ? context.tr('Wybrany')
+                                                        : context.trf(
+                                                            'Wybierz • {price}',
+                                                            <String, String>{
+                                                              'price': '25 zł',
+                                                            },
+                                                          ),
+                                                  ),
+                                                  const SizedBox(height: 14),
+                                                  _PremiumPlanTile(
+                                                    icon: Icons
+                                                        .all_inclusive_rounded,
+                                                    title: '49 zł / na zawsze',
+                                                    subtitle:
+                                                        'Jednorazowo, bez odnawiania.',
+                                                    durationLabel:
+                                                        'Czas trwania: na zawsze',
+                                                    selected:
+                                                        _subscriptionPlanId ==
+                                                        _subscriptionPlanLifetime,
+                                                    featured: true,
+                                                    onPressed: () =>
+                                                        _activateSubscriptionPlan(
+                                                          _subscriptionPlanLifetime,
+                                                        ),
+                                                    buttonLabel:
+                                                        _subscriptionPlanId ==
+                                                            _subscriptionPlanLifetime
+                                                        ? context.tr('Wybrany')
+                                                        : context.trf(
+                                                            'Wybierz • {price}',
+                                                            <String, String>{
+                                                              'price': '49 zł',
+                                                            },
+                                                          ),
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  Text(
+                                                    _subscriptionActive
+                                                        ? context.trf(
+                                                            'Aktywny plan: {plan}',
+                                                            <String, String>{
+                                                              'plan': context.tr(
+                                                                _subscriptionPlanLabel(
+                                                                  _subscriptionPlanId,
+                                                                ),
+                                                              ),
+                                                            },
+                                                          )
+                                                        : context.tr(
+                                                            'Premium nieaktywne. Wybierz plan.',
+                                                          ),
+                                                    textAlign: TextAlign.center,
+                                                    style: theme
+                                                        .textTheme
+                                                        .bodySmall
+                                                        ?.copyWith(
+                                                          color:
+                                                              _subscriptionActive
+                                                              ? palette.success
+                                                              : palette
+                                                                    .secondaryText,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -3386,7 +10738,7 @@ class _FlowHomePageState extends State<FlowHomePage>
                                     icon: const Icon(
                                       Icons.chevron_left_rounded,
                                     ),
-                                    tooltip: 'Poprzedni miesiąc',
+                                    tooltip: context.tr('Poprzedni miesiąc'),
                                   ),
                                   Expanded(
                                     child: Text(
@@ -3406,7 +10758,7 @@ class _FlowHomePageState extends State<FlowHomePage>
                                     icon: const Icon(
                                       Icons.chevron_right_rounded,
                                     ),
-                                    tooltip: 'Następny miesiąc',
+                                    tooltip: context.tr('Następny miesiąc'),
                                   ),
                                 ],
                               ),
@@ -3473,7 +10825,7 @@ class _FlowHomePageState extends State<FlowHomePage>
                               const SizedBox(height: 6),
                               if (selectedEntries.isEmpty) ...<Widget>[
                                 Text(
-                                  'Brak zapisów dla tego dnia.',
+                                  context.tr('Brak zapisów dla tego dnia.'),
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: palette.secondaryText,
                                     height: 1.45,
@@ -3490,7 +10842,9 @@ class _FlowHomePageState extends State<FlowHomePage>
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
-                                    'Ten dzień nie ma jeszcze zapisanych aktywności.',
+                                    context.tr(
+                                      'Ten dzień nie ma jeszcze zapisanych aktywności.',
+                                    ),
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       color: palette.tertiaryText,
                                     ),
@@ -3515,8 +10869,15 @@ class _FlowHomePageState extends State<FlowHomePage>
                                       ),
                                       label:
                                           selectedEntries[index].calendarLabel,
-                                      subtitle:
-                                          'Zapisano o ${_formatSessionTimeLabel(selectedEntries[index].completedAtIso)}',
+                                      subtitle: context.trf(
+                                        'Zapisano o {time}',
+                                        <String, String>{
+                                          'time': _formatSessionTimeLabel(
+                                            selectedEntries[index]
+                                                .completedAtIso,
+                                          ),
+                                        },
+                                      ),
                                       onLongPress: () => _deleteSavedProgress(
                                         selectedEntries[index],
                                       ),
@@ -3537,25 +10898,35 @@ class _FlowHomePageState extends State<FlowHomePage>
                     children: <Widget>[
                       const SectionHeader(
                         eyebrow: 'Plan dnia',
-                        title: 'Krótka ścieżka wejścia w rytm',
+                        title: 'Ścieżka wejścia w rytm',
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        context.tr(
+                          'Ten zestaw prowadzi Cię od wyciszenia do pełnej gotowości poznawczej. Najpierw stabilizujesz uwagę, potem podnosisz tempo reakcji, a na końcu utrwalasz koncentrację w praktyce.',
+                        ),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: palette.secondaryText,
+                          height: 1.5,
+                        ),
                       ),
                       const SizedBox(height: 18),
                       const DailyRoutineStep(
-                        title: '1. Punkt centralny',
+                        title: '1. Reset bodźców',
                         details:
-                            'Zacznij od spokojnej fiksacji wzroku i wyciszenia bodźców.',
+                            '60 sekund spokojnej fiksacji wzroku, żeby wyciszyć chaos i wejść w stabilny fokus.',
                       ),
                       const SizedBox(height: 12),
                       const DailyRoutineStep(
-                        title: '2. Skan koncentracji',
+                        title: '2. Aktywacja koncentracji',
                         details:
-                            'Krótki test selektywnej uwagi i szybkiej decyzji.',
+                            'Krótka sesja Flow Runner albo Split Decision podnosi czujność i skraca czas reakcji.',
                       ),
                       const SizedBox(height: 12),
                       const DailyRoutineStep(
-                        title: '3. Dalszy trening',
+                        title: '3. Utrwalenie efektu',
                         details:
-                            'Pulse Sync, Sprint Czytania albo Drabina Pamięci.',
+                            'Pulse Sync, Sprint Czytania lub Drabina Pamięci wzmacniają pamięć roboczą i utrzymanie tempa. Progres zapisuje się automatycznie.',
                       ),
                     ],
                   ),
@@ -3563,43 +10934,108 @@ class _FlowHomePageState extends State<FlowHomePage>
                 const SizedBox(height: 18),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
-                    'Mini-gry',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      color: palette.heroText,
+                  child: Container(
+                    width: double.infinity,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: palette.heroText.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: palette.heroText.withValues(alpha: 0.16),
+                      ),
+                    ),
+                    child: Text(
+                      'Flow',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineLarge?.copyWith(
+                        color: const Color(0xFFFFD700),
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  'Każda sesja ma prostą instrukcję, krótki czas i jeden konkretny efekt dla skupienia.',
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: palette.heroMutedText,
-                  ),
-                ),
                 const SizedBox(height: 16),
                 for (final exercise in exerciseDefinitions) ...<Widget>[
                   ExercisePreviewCard(
                     definition: exercise,
                     isCompleted: _completed.contains(exercise.kind),
-                    onOpen: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (BuildContext context) {
-                            return ExerciseDetailPage(
-                              definition: exercise,
-                              initialCompleted: _completed.contains(
-                                exercise.kind,
-                              ),
-                              onCompletionChanged: (bool completed) {
-                                _updateCompletion(exercise.kind, completed);
-                              },
-                            );
-                          },
-                        ),
-                      );
-                    },
+                    isLocked:
+                        exercise.kind == ExerciseKind.mnemonicVault &&
+                        !_mnemonicVaultUnlocked,
+                    onOpen: () => _openExercise(exercise),
                   ),
+                  if (exercise.kind == ExerciseKind.flowRunner) ...<Widget>[
+                    const SizedBox(height: 12),
+                    SurfaceCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const SectionHeader(
+                            eyebrow: 'W trakcie budowy',
+                            title: 'Następne sesje wkrótce',
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: palette.surfaceStrong.withValues(
+                                alpha: 0.68,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: palette.surfaceBorder.withValues(
+                                  alpha: 0.9,
+                                ),
+                              ),
+                            ),
+                            child: Text.rich(
+                              TextSpan(
+                                children: <InlineSpan>[
+                                  TextSpan(
+                                    text:
+                                        '${context.tr('W trakcie budowy').toUpperCase()}\n',
+                                    style: theme.textTheme.labelLarge?.copyWith(
+                                      color: palette.primaryText,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.9,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: context.tr(
+                                      'Następne sesje trafią do aplikacji w najbliższych aktualizacjach.',
+                                    ),
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: palette.secondaryText,
+                                      height: 1.45,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            context.tr(
+                              'Dopracowujemy je tak, aby od razu były gotowe do regularnego treningu.',
+                            ),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: palette.secondaryText,
+                              height: 1.45,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                 ],
                 _GoldenCrownCard(onUnlocked: _showGoldenSecretScaffold),
@@ -3937,6 +11373,7 @@ class _MindeIdeasPageState extends State<MindeIdeasPage> {
   String? _selectedCategoryId;
   bool _loading = true;
   bool _showCategoryComposer = false;
+  bool _showNotebookIntro = false;
 
   String get _categoryDraft => _categoryController.text.trim();
 
@@ -3981,6 +11418,12 @@ class _MindeIdeasPageState extends State<MindeIdeasPage> {
     final preferences = await SharedPreferences.getInstance();
     final rawData = preferences.getString(_storageKey);
     final snapshot = _decodeStoredIdeas(rawData);
+    var introCompleted =
+        preferences.getBool(_mindeIdeasIntroCompletedPrefsKey) ?? false;
+    if (!introCompleted && snapshot.categories.isNotEmpty) {
+      introCompleted = true;
+      await preferences.setBool(_mindeIdeasIntroCompletedPrefsKey, true);
+    }
 
     if (!mounted) {
       return;
@@ -3990,7 +11433,22 @@ class _MindeIdeasPageState extends State<MindeIdeasPage> {
       _categories = snapshot.categories;
       _notes = snapshot.notes;
       _selectedCategoryId = snapshot.selectedCategoryId;
+      _showNotebookIntro = !introCompleted;
       _loading = false;
+    });
+  }
+
+  Future<void> _completeNotebookIntroIfNeeded() async {
+    if (!_showNotebookIntro) {
+      return;
+    }
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_mindeIdeasIntroCompletedPrefsKey, true);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _showNotebookIntro = false;
     });
   }
 
@@ -4198,6 +11656,7 @@ class _MindeIdeasPageState extends State<MindeIdeasPage> {
     });
     _closeCategoryComposer();
     await _persistIdeas();
+    await _completeNotebookIntroIfNeeded();
   }
 
   Future<void> _selectCategory(String categoryId) async {
@@ -4470,7 +11929,7 @@ class _MindeIdeasPageState extends State<MindeIdeasPage> {
     }
 
     final result = await Navigator.of(context).push<_MindeIdeaEditorResult>(
-      _buildExerciseSessionRoute<_MindeIdeaEditorResult>(
+      _buildMindeNoteRoute<_MindeIdeaEditorResult>(
         builder: (BuildContext context) {
           return _MindeIdeaEditorPage(note: note);
         },
@@ -4701,6 +12160,64 @@ class _MindeIdeasPageState extends State<MindeIdeasPage> {
                       : ListView(
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
                           children: <Widget>[
+                            if (_showNotebookIntro) ...<Widget>[
+                              Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 14),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  18,
+                                  16,
+                                  18,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: palette.surfaceStrong.withValues(
+                                    alpha: 0.96,
+                                  ),
+                                  borderRadius: BorderRadius.circular(22),
+                                  border: Border.all(
+                                    color: palette.surfaceBorder,
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: <Widget>[
+                                    Text(
+                                      context.tr(
+                                        'Prosty katalog notatkowy dla Twoich przyszłych planów',
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(
+                                            color: palette.primaryText,
+                                            fontWeight: FontWeight.w900,
+                                            height: 1.25,
+                                            fontFamilyFallback: const <String>[
+                                              'Avenir Next',
+                                              'Georgia',
+                                              'Times New Roman',
+                                              'serif',
+                                            ],
+                                          ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      context.tr(
+                                        'Instrukcja: Kliknij nazwę notatnika u góry, aby od razu dodać nową kategorię.',
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.bodyLarge
+                                          ?.copyWith(
+                                            color: palette.secondaryText,
+                                            fontWeight: FontWeight.w700,
+                                            height: 1.45,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             if (_categories.isEmpty)
                               const SizedBox.shrink()
                             else
@@ -5094,13 +12611,13 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: <Widget>[
                                 Text(
-                                  definition.title,
+                                  definition.titleT(context),
                                   style: theme.textTheme.headlineMedium
                                       ?.copyWith(color: palette.heroText),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  definition.subtitle,
+                                  definition.subtitleT(context),
                                   style: theme.textTheme.bodyLarge?.copyWith(
                                     color: palette.heroMutedText,
                                   ),
@@ -5114,7 +12631,8 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: definition.tags
+                        children: definition
+                            .tagsT(context)
                             .map(
                               (String tag) =>
                                   TagChip(label: tag, tint: definition.accent),
@@ -5127,14 +12645,14 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                           Expanded(
                             child: DetailMetric(
                               label: 'Czas',
-                              value: definition.duration,
+                              value: definition.durationT(context),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: DetailMetric(
                               label: 'Kiedy',
-                              value: definition.idealMoment,
+                              value: definition.idealMomentT(context),
                             ),
                           ),
                         ],
@@ -5142,7 +12660,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                       const SizedBox(height: 12),
                       DetailMetric(
                         label: 'Efekt',
-                        value: definition.outcome,
+                        value: definition.outcomeT(context),
                         fullWidth: true,
                       ),
                     ],
@@ -5157,7 +12675,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                         SectionHeader(eyebrow: 'Po co', title: purposeTitle),
                         const SizedBox(height: 12),
                         Text(
-                          definition.summary,
+                          definition.summaryT(context),
                           style: theme.textTheme.bodyLarge?.copyWith(
                             color: palette.primaryText,
                           ),
@@ -5180,7 +12698,8 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                               ),
                               const SizedBox(height: 16),
                               for (final entry
-                                  in definition.instructions
+                                  in definition
+                                      .instructionsT(context)
                                       .asMap()
                                       .entries) ...<Widget>[
                                 InstructionStep(
@@ -5239,6 +12758,48 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                 ],
                 if (isMnemonicVault) ...<Widget>[
                   const SizedBox(height: 18),
+                  SurfaceCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const SectionHeader(
+                          eyebrow: 'Instrukcja',
+                          title: 'Mnemotechnika w skrócie',
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          context.tr(
+                            'Mnemotechnika to sposób, w którym liczby łączysz z konkretnymi obrazami, żeby szybciej zapisywać i odtwarzać informacje.',
+                          ),
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: palette.primaryText,
+                            height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          context.tr(
+                            'Przykład: liczbie 14 przypisujesz obraz książki i wyobrażasz sobie, że książka wpada do plecaka z dużym hukiem.',
+                          ),
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: palette.primaryText,
+                            height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          context.tr(
+                            'Kiedy później widzisz 14, obraz wraca automatycznie, a odpowiedź pojawia się szybciej, pewniej i z mniejszym wysiłkiem.',
+                          ),
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: palette.primaryText,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   _MnemonicVaultDigitListCard(accent: definition.accent),
                   const SizedBox(height: 18),
                   _MnemonicVaultGameSelectorCard(
@@ -5276,8 +12837,12 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                       Expanded(
                         child: Text(
                           _completed
-                              ? 'Sesja została już zapisana jako wykonana. Możesz wrócić do listy.'
-                              : 'Start gry zapisze to ćwiczenie automatycznie jako wykonane w tej sesji.',
+                              ? context.tr(
+                                  'Sesja została już zapisana jako wykonana. Możesz wrócić do listy.',
+                                )
+                              : context.tr(
+                                  'Start gry zapisze to ćwiczenie automatycznie jako wykonane w tej sesji.',
+                                ),
                           style: theme.textTheme.bodyLarge?.copyWith(
                             color: palette.primaryText,
                           ),
@@ -5292,7 +12857,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                               ? palette.onSuccess
                               : null,
                         ),
-                        child: Text(_completed ? 'Wróć' : 'Gotowe'),
+                        child: Text(context.tr(_completed ? 'Wróć' : 'Gotowe')),
                       ),
                     ],
                   ),
@@ -5659,7 +13224,16 @@ class _MnemonicRecallDifficultyAggregateBuilder {
 }
 
 String _mnemonicRecallMistakeCountLabel(int count) {
-  return '$count ${_memoryPluralLabel(count, singular: 'potknięcie', paucal: 'potknięcia', plural: 'potknięć')}';
+  return switch (_activeUiLanguage) {
+    _AppLanguage.english => '$count ${count == 1 ? 'mistake' : 'mistakes'}',
+    _AppLanguage.german => '$count ${count == 1 ? 'Fehler' : 'Fehler'}',
+    _AppLanguage.ukrainian =>
+      '$count ${_memoryPluralLabel(count, singular: 'помилка', paucal: 'помилки', plural: 'помилок')}',
+    _AppLanguage.russian =>
+      '$count ${_memoryPluralLabel(count, singular: 'ошибка', paucal: 'ошибки', plural: 'ошибок')}',
+    _AppLanguage.polish =>
+      '$count ${_memoryPluralLabel(count, singular: 'potknięcie', paucal: 'potknięcia', plural: 'potknięć')}',
+  };
 }
 
 String _formatMnemonicRecallSessionDuration(Duration duration) {
@@ -5680,19 +13254,35 @@ String _formatMnemonicRecallSessionDuration(Duration duration) {
 
 String _buildMnemonicRecallProgressDetail(_MnemonicRecallSessionRecord record) {
   final stableLabel =
-      'stabilne ${_mnemonicDigitEntries.length - record.problemDigitCount}/${_mnemonicDigitEntries.length}';
+      _localizedText('stabilne {stable}/{total}', _activeUiLanguage)
+          .replaceAll(
+            '{stable}',
+            '${_mnemonicDigitEntries.length - record.problemDigitCount}',
+          )
+          .replaceAll('{total}', '${_mnemonicDigitEntries.length}');
   final sessionDuration = record.sessionDuration;
   if (sessionDuration == null) {
     return stableLabel;
   }
-  return '$stableLabel • czas sesji ${_formatMnemonicRecallSessionDuration(sessionDuration)}';
+  return _localizedText(
+        '{stableLabel} • czas sesji {duration}',
+        _activeUiLanguage,
+      )
+      .replaceAll('{stableLabel}', stableLabel)
+      .replaceAll(
+        '{duration}',
+        _formatMnemonicRecallSessionDuration(sessionDuration),
+      );
 }
 
 String _buildMnemonicRecallSessionDifficultySummary(
   _MnemonicRecallSessionRecord record,
 ) {
   if (record.problemDigits.isEmpty) {
-    return 'Czysta runda. Żadna cyfra nie wróciła do dodatkowej serii.';
+    return _localizedText(
+      'Czysta runda. Żadna cyfra nie wróciła do dodatkowej serii.',
+      _activeUiLanguage,
+    );
   }
 
   final preview = record.problemDigits
@@ -5704,13 +13294,85 @@ String _buildMnemonicRecallSessionDifficultySummary(
       .join(', ');
   final remaining =
       record.problemDigits.length - min(4, record.problemDigits.length);
-  return remaining > 0 ? '$preview, +$remaining więcej' : preview;
+  if (remaining > 0) {
+    return _localizedText(
+      '{preview}, +{remaining} więcej',
+      _activeUiLanguage,
+    ).replaceAll('{preview}', preview).replaceAll('{remaining}', '$remaining');
+  }
+  return preview;
 }
 
 final Map<int, _MnemonicDigitEntry> _mnemonicDigitEntryByNumber =
     <int, _MnemonicDigitEntry>{
       for (final entry in _mnemonicDigitEntries) entry.number: entry,
     };
+
+Map<int, String> _mnemonicCustomLabels = <int, String>{};
+
+void _applyMnemonicCustomLabelsFromRaw(String? rawData) {
+  if (rawData == null || rawData.isEmpty) {
+    _mnemonicCustomLabels = <int, String>{};
+    return;
+  }
+  try {
+    final decoded = jsonDecode(rawData);
+    if (decoded is! Map<String, dynamic>) {
+      _mnemonicCustomLabels = <int, String>{};
+      return;
+    }
+    final labels = <int, String>{};
+    for (final MapEntry<String, dynamic> entry in decoded.entries) {
+      final number = int.tryParse(entry.key);
+      final value = entry.value;
+      if (number == null || value is! String) {
+        continue;
+      }
+      final trimmed = value.trim();
+      if (trimmed.isEmpty || _mnemonicDigitEntryByNumber[number] == null) {
+        continue;
+      }
+      labels[number] = trimmed;
+    }
+    _mnemonicCustomLabels = labels;
+  } catch (_) {
+    _mnemonicCustomLabels = <int, String>{};
+  }
+}
+
+Future<void> _persistMnemonicCustomLabels(Map<int, String> labels) async {
+  final cleaned = <int, String>{};
+  for (final MapEntry<int, String> entry in labels.entries) {
+    final number = entry.key;
+    final value = entry.value.trim();
+    final defaultValue = _mnemonicDigitEntryByNumber[number]?.label ?? '';
+    if (value.isEmpty || value == defaultValue) {
+      continue;
+    }
+    cleaned[number] = value;
+  }
+  _mnemonicCustomLabels = cleaned;
+  final preferences = await SharedPreferences.getInstance();
+  if (cleaned.isEmpty) {
+    await preferences.remove(_mnemonicCustomLabelsPrefsKey);
+    return;
+  }
+  await preferences.setString(
+    _mnemonicCustomLabelsPrefsKey,
+    jsonEncode(<String, String>{
+      for (final MapEntry<int, String> entry in cleaned.entries)
+        '${entry.key}': entry.value,
+    }),
+  );
+}
+
+String _mnemonicLabelForNumber(int number) {
+  final customLabel = _mnemonicCustomLabels[number];
+  if (customLabel != null && customLabel.isNotEmpty) {
+    return customLabel;
+  }
+  return _mnemonicDigitEntryByNumber[number]?.label ?? '';
+}
 
 String _formatMnemonicNumber(int number) {
   return '$number';
@@ -5752,7 +13414,13 @@ const int _mnemonicSequenceMaxMemorizeSeconds = 10;
 const int _mnemonicSequenceRounds = 10;
 
 String _formatMnemonicSprintSpeedLabel(int milliseconds) {
-  return '${(milliseconds / 1000).toStringAsFixed(milliseconds % 1000 == 0 ? 0 : 2)} s / karta';
+  final seconds = (milliseconds / 1000).toStringAsFixed(
+    milliseconds % 1000 == 0 ? 0 : 2,
+  );
+  return _localizedText(
+    '{seconds} s / karta',
+    _activeUiLanguage,
+  ).replaceAll('{seconds}', seconds);
 }
 
 class _MnemonicVaultGameSelectorCard extends StatefulWidget {
@@ -5829,7 +13497,10 @@ class _MnemonicVaultGameSelectorCardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const SectionHeader(eyebrow: 'Gry', title: 'Tryby gry'),
+          SectionHeader(
+            eyebrow: context.tr('Gry'),
+            title: context.tr('Tryby gry'),
+          ),
           const SizedBox(height: 18),
           Container(
             width: double.infinity,
@@ -5877,8 +13548,8 @@ class _MnemonicVaultGameSelectorCardState
                             ),
                           ),
                           child: Center(
-                            child: Text(
-                              game.label,
+                              child: Text(
+                              context.tr(game.label),
                               textAlign: TextAlign.center,
                               style: theme.textTheme.titleLarge?.copyWith(
                                 color: palette.primaryText,
@@ -6013,15 +13684,44 @@ class _MnemonicVaultDigitListCardState
                       width: double.infinity,
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: palette.surfaceStrong,
+                        color: const Color(0xFF0F1A27),
                         borderRadius: BorderRadius.circular(22),
                         border: Border.all(
-                          color: widget.accent.withValues(alpha: 0.12),
+                          color: widget.accent.withValues(alpha: 0.3),
                         ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.tonalIcon(
+                              onPressed: () async {
+                                final updated = await Navigator.of(context)
+                                    .push<bool>(
+                                      MaterialPageRoute<bool>(
+                                        builder: (BuildContext context) {
+                                          return _MnemonicCustomLabelsPage(
+                                            accent: widget.accent,
+                                          );
+                                        },
+                                      ),
+                                    );
+                                if (updated == true && mounted) {
+                                  setState(() {});
+                                }
+                              },
+                              icon: const Icon(Icons.tune_rounded),
+                              label: Text(context.tr('Ustaw po swojemu')),
+                              style: FilledButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                backgroundColor: widget.accent.withValues(
+                                  alpha: 0.28,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
                           for (
                             var index = 0;
                             index < _mnemonicDigitEntries.length;
@@ -6045,7 +13745,7 @@ class _MnemonicVaultDigitListCardState
                                       _mnemonicDigitEntries[index].number,
                                     ),
                                     style: theme.textTheme.labelLarge?.copyWith(
-                                      color: widget.accent,
+                                      color: Colors.white,
                                       fontWeight: FontWeight.w900,
                                       letterSpacing: 0.8,
                                     ),
@@ -6053,15 +13753,14 @@ class _MnemonicVaultDigitListCardState
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(top: 7),
-                                    child: Text(
-                                      _mnemonicDigitEntries[index].label,
-                                      style: theme.textTheme.bodyLarge
-                                          ?.copyWith(
-                                            color: const Color(0xFF16212B),
-                                            fontWeight: FontWeight.w700,
-                                          ),
+                                  child: Text(
+                                    _mnemonicLabelForNumber(
+                                      _mnemonicDigitEntries[index].number,
+                                    ),
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.25,
                                     ),
                                   ),
                                 ),
@@ -6082,6 +13781,217 @@ class _MnemonicVaultDigitListCardState
                       ),
                     ),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MnemonicCustomLabelsPage extends StatefulWidget {
+  const _MnemonicCustomLabelsPage({required this.accent});
+
+  final Color accent;
+
+  @override
+  State<_MnemonicCustomLabelsPage> createState() =>
+      _MnemonicCustomLabelsPageState();
+}
+
+class _MnemonicCustomLabelsPageState extends State<_MnemonicCustomLabelsPage> {
+  late final List<_MnemonicDigitEntry> _entries;
+  late final Map<int, TextEditingController> _controllers;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _entries = _mnemonicDigitEntries;
+    _controllers = <int, TextEditingController>{
+      for (final _MnemonicDigitEntry entry in _entries)
+        entry.number: TextEditingController(
+          text: _mnemonicLabelForNumber(entry.number),
+        ),
+    };
+  }
+
+  @override
+  void dispose() {
+    for (final TextEditingController controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) {
+      return;
+    }
+    setState(() {
+      _saving = true;
+    });
+    final nextLabels = <int, String>{
+      for (final _MnemonicDigitEntry entry in _entries)
+        entry.number: _controllers[entry.number]!.text.trim(),
+    };
+    await _persistMnemonicCustomLabels(nextLabels);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _saving = false;
+    });
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(context.tr('Zapisano własne skojarzenia.'))),
+      );
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = context.appPalette;
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(context.tr('Ustaw po swojemu')),
+      ),
+      body: Stack(
+        children: <Widget>[
+          const AppBackdrop(),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[
+                  Colors.black.withValues(alpha: 0.24),
+                  Colors.black.withValues(alpha: 0.52),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Column(
+              children: <Widget>[
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+                    itemCount: _entries.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (BuildContext context, int index) {
+                      final entry = _entries[index];
+                      return Container(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                        decoration: BoxDecoration(
+                          color: palette.surfaceStrong.withValues(alpha: 0.94),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: widget.accent.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: <Widget>[
+                            Container(
+                              width: 54,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: widget.accent.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                _formatMnemonicNumber(entry.number),
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: _controllers[entry.number],
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  hintText: entry.label,
+                                  hintStyle: theme.textTheme.bodyMedium
+                                      ?.copyWith(color: Colors.white70),
+                                  filled: true,
+                                  fillColor: const Color(
+                                    0xFF0F1A27,
+                                  ).withValues(alpha: 0.82),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: widget.accent.withValues(
+                                        alpha: 0.26,
+                                      ),
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: widget.accent.withValues(
+                                        alpha: 0.22,
+                                      ),
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: widget.accent.withValues(
+                                        alpha: 0.55,
+                                      ),
+                                      width: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _saving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        backgroundColor: widget.accent,
+                        foregroundColor: const Color(0xFF031A2C),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Text(
+                        context.tr('Zapisz własne słowa'),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -6202,27 +14112,37 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
     if (value == null) {
       return '';
     }
-    return value == 0 ? 'Start' : '$value';
+    return value == 0 ? context.tr('Start') : '$value';
   }
 
   String get _phaseHint {
     if (_finished) {
       return widget.autoExitOnFinish
-          ? 'Wszystkie cyfry są już utrwalone. Za 4 sekundy wrócisz do wyboru gry.'
-          : 'Wszystkie cyfry są już utrwalone. Możesz uruchomić recall jeszcze raz.';
+          ? context.tr(
+              'Wszystkie cyfry są już utrwalone. Za 4 sekundy wrócisz do wyboru gry.',
+            )
+          : context.tr(
+              'Wszystkie cyfry są już utrwalone. Możesz uruchomić recall jeszcze raz.',
+            );
     }
     if (_isCountingDown) {
       return _showingRoundLevelIntro
-          ? 'Kolejna runda ruszy po krótkiej zapowiedzi.'
-          : 'Za chwilę pojawi się liczba. Reagujesz od razu: Tak albo Nie.';
+          ? context.tr('Kolejna runda ruszy po krótkiej zapowiedzi.')
+          : context.tr(
+              'Za chwilę pojawi się liczba. Reagujesz od razu: Tak albo Nie.',
+            );
     }
     if (_showingPrompt) {
-      return 'Masz 4 sekundy na decyzję: Tak albo Nie.';
+      return context.tr('Masz 4 sekundy na decyzję: Tak albo Nie.');
     }
     if (_hasSessionStarted && _rounds > 0) {
-      return 'Kolejne rundy pokażą już tylko cyfry oznaczone jako Nie.';
+      return context.tr(
+        'Kolejne rundy pokażą już tylko cyfry oznaczone jako Nie.',
+      );
     }
-    return 'Po pierwszej rundzie wrócą już tylko cyfry oznaczone jako Nie.';
+    return context.tr(
+      'Po pierwszej rundzie wrócą już tylko cyfry oznaczone jako Nie.',
+    );
   }
 
   int get _cycleTotal => _currentCycleNumbers.isEmpty
@@ -6233,12 +14153,17 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
 
   String get _immersiveProgressHint {
     if (_finished) {
-      return 'wszystko zapamiętane';
+      return context.tr('Wszystko zapamiętane');
     }
     if (!_hasSessionStarted) {
-      return 'do utrwalenia ${_mnemonicDigitEntries.length}';
+      return context.trf('Do utrwalenia {count}', <String, String>{
+        'count': '${_mnemonicDigitEntries.length}',
+      });
     }
-    return 'runda ${max(_cycleNumber, 1)} • do utrwalenia $_remainingToMaster';
+    return context.trf('Runda {round} • do utrwalenia {left}', <String, String>{
+      'round': '${max(_cycleNumber, 1)}',
+      'left': '$_remainingToMaster',
+    });
   }
 
   int get _remainingToMaster => _mnemonicDigitEntries.length - _rememberedCount;
@@ -6251,7 +14176,14 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
     if (currentNumber == null) {
       return null;
     }
-    return _mnemonicDigitEntryByNumber[currentNumber];
+    final baseEntry = _mnemonicDigitEntryByNumber[currentNumber];
+    if (baseEntry == null) {
+      return null;
+    }
+    return _MnemonicDigitEntry(
+      number: baseEntry.number,
+      label: _mnemonicLabelForNumber(baseEntry.number),
+    );
   }
 
   _MnemonicRecallSessionRecord? get _latestStoredSession =>
@@ -6268,15 +14200,14 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
 
     for (final record in _storedSessionHistory.take(12)) {
       for (final issue in record.problemDigits) {
-        final entry = _mnemonicDigitEntryByNumber[issue.number];
-        if (entry == null) {
+        if (_mnemonicDigitEntryByNumber[issue.number] == null) {
           continue;
         }
         final aggregate = aggregates.putIfAbsent(
           issue.number,
           () => _MnemonicRecallDifficultyAggregateBuilder(
             number: issue.number,
-            label: entry.label,
+            label: _mnemonicLabelForNumber(issue.number),
           ),
         );
         aggregate.totalMistakes += issue.misses;
@@ -6452,7 +14383,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
       _buildExerciseSessionRoute<void>(
         builder: (BuildContext context) {
           return FullscreenTrainerPage(
-            title: 'Historia trudnych cyfr',
+            title: context.tr('Historia trudnych cyfr'),
             accent: widget.accent,
             contentMaxWidth: 760,
             child: _MnemonicRecallHistoryContent(
@@ -6502,7 +14433,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
           child: Column(
             children: <Widget>[
               Text(
-                'Zapisana historia trudnych cyfr',
+                context.tr('Zapisana historia trudnych cyfr'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: palette.primaryText,
@@ -6512,10 +14443,23 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
               const SizedBox(height: 8),
               Text(
                 !_storedHistoryLoaded
-                    ? 'Ładowanie zapisów Recall...'
+                    ? context.tr('Ładowanie zapisów Recall...')
                     : latestSession == null
-                    ? 'Skrzynia jest gotowa. Po pierwszej pełnej sesji zapiszą się tu Twoje wyniki i trudne cyfry.'
-                    : '$historyCount zapisów • ostatnia sesja ${_formatSessionDateLabel(latestSession.dateKey)} o ${_formatSessionTimeLabel(latestSession.completedAtIso)}',
+                    ? context.tr(
+                        'Skrzynia jest gotowa. Po pierwszej pełnej sesji zapiszą się tu Twoje wyniki i trudne cyfry.',
+                      )
+                    : context.trf(
+                        '{count} zapisów • ostatnia sesja {date} o {time}',
+                        <String, String>{
+                          'count': '$historyCount',
+                          'date': _formatSessionDateLabel(
+                            latestSession.dateKey,
+                          ),
+                          'time': _formatSessionTimeLabel(
+                            latestSession.completedAtIso,
+                          ),
+                        },
+                      ),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: palette.secondaryText,
@@ -6553,7 +14497,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
               ),
               const SizedBox(height: 14),
               Text(
-                'Otwórz skrzynię wyników',
+                context.tr('Otwórz skrzynię wyników'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: widget.accent,
@@ -6583,7 +14527,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                   backgroundColor: _memorySuccessColor,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Tak'),
+                child: Text(context.tr('Tak')),
               ),
             ),
           ),
@@ -6599,7 +14543,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                   backgroundColor: _memoryFailureColor,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Nie'),
+                child: Text(context.tr('Nie')),
               ),
             ),
           ),
@@ -6741,8 +14685,10 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
       _immersivePaused = false;
       _currentNumber = null;
       _status = restartFromScratch
-          ? 'Start za chwilę. Pierwsza runda przejdzie przez całą bazę cyfr.'
-          : 'Wracamy do treningu. Za chwilę następna liczba.';
+          ? context.tr(
+              'Start za chwilę. Pierwsza runda przejdzie przez całą bazę cyfr.',
+            )
+          : context.tr('Wracamy do treningu. Za chwilę następna liczba.');
     });
 
     HapticFeedback.selectionClick();
@@ -6754,7 +14700,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
       _buildExerciseSessionRoute<void>(
         builder: (BuildContext context) {
           return FullscreenTrainerPage(
-            title: 'Sejf cyfr ∞',
+            title: context.tr('Sejf cyfr ∞'),
             accent: widget.accent,
             expandBody: true,
             showHeader: false,
@@ -6811,7 +14757,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
     _resumeSessionTiming();
     setState(() {
       _immersivePaused = false;
-      _status = 'Trening wznowiony.';
+      _status = context.tr('Trening wznowiony.');
     });
 
     if (_isCountingDown) {
@@ -6857,7 +14803,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
       _currentNumber = nextNumber;
       _showingPrompt = true;
       _showingRoundLevelIntro = false;
-      _status = 'Szybka reakcja: Tak albo Nie.';
+      _status = context.tr('Szybka reakcja: Tak albo Nie.');
     });
 
     HapticFeedback.selectionClick();
@@ -6882,7 +14828,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
       _showingPrompt = false;
       _showingRoundLevelIntro = true;
       _currentNumber = null;
-      _status = 'Utrwalanie';
+      _status = context.tr('Utrwalanie');
     });
     _runStartCountdownTimer();
   }
@@ -6938,7 +14884,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
       _showingRoundLevelIntro = false;
       _immersivePaused = false;
       _currentNumber = null;
-      _status = 'Gratulacje, pamiętasz wszystkie cyfry na pamięć!';
+      _status = context.tr('Gratulacje, pamiętasz wszystkie cyfry na pamięć!');
     });
     _storeFinishedRecallSession(sessionDuration);
 
@@ -6973,7 +14919,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
       _currentCycleNumbers = <int>[];
       _nextCycleNumbers = <int>[];
       _history = <_MnemonicRecallRecord>[];
-      _status = 'Statystyki wyczyszczone. Możesz zacząć od nowa.';
+      _status = context.tr('Statystyki wyczyszczone. Możesz zacząć od nowa.');
     });
   }
 
@@ -7011,7 +14957,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  'Sesja zatrzymana',
+                  context.tr('Sesja zatrzymana'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineMedium?.copyWith(
                     color: const Color(0xFF102533),
@@ -7045,7 +14991,9 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Gratulacje, pamiętasz wszystkie cyfry na pamięć!',
+                  context.tr(
+                    'Gratulacje, pamiętasz wszystkie cyfry na pamięć!',
+                  ),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineMedium?.copyWith(
                     color: const Color(0xFF102533),
@@ -7062,7 +15010,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       Text(
-                        'Utrwalanie',
+                        context.tr('Utrwalanie'),
                         textAlign: TextAlign.center,
                         style: theme.textTheme.titleLarge?.copyWith(
                           color: const Color(0xFF102533),
@@ -7119,7 +15067,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                 Icon(Icons.casino_outlined, size: 52, color: widget.accent),
                 const SizedBox(height: 16),
                 Text(
-                  'Losuj liczby z całej bazy',
+                  context.tr('Losuj liczby z całej bazy'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineMedium?.copyWith(
                     color: const Color(0xFF102533),
@@ -7128,7 +15076,9 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Po pierwszej rundzie wrócą już tylko cyfry oznaczone jako Nie.',
+                  context.tr(
+                    'Po pierwszej rundzie wrócą już tylko cyfry oznaczone jako Nie.',
+                  ),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: const Color(0xFF4A5761),
@@ -7354,10 +15304,10 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                                 ),
                                 child: Text(
                                   _immersivePaused
-                                      ? 'Wznów'
+                                      ? context.tr('Wznów')
                                       : _finished
-                                      ? 'Jeszcze raz'
-                                      : 'Start',
+                                      ? context.tr('Jeszcze raz')
+                                      : context.tr('Start'),
                                 ),
                               ),
                             ),
@@ -7369,7 +15319,9 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                                 ),
                                 onPressed: sessionActive
                                     ? () => _pauseImmersiveSession(
-                                        'Trening zatrzymany. Możesz wrócić do sesji.',
+                                        context.tr(
+                                          'Trening zatrzymany. Możesz wrócić do sesji.',
+                                        ),
                                       )
                                     : null,
                                 style: OutlinedButton.styleFrom(
@@ -7378,7 +15330,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                                     color: Colors.white.withValues(alpha: 0.22),
                                   ),
                                 ),
-                                child: const Text('Stop'),
+                                child: Text(context.tr('Stop')),
                               ),
                             ),
                           ],
@@ -7421,19 +15373,19 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: <Widget>[
                   Text(
-                    'Szybki recall',
+                    context.tr('Szybki recall'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium?.copyWith(
-                      color: const Color(0xFF16212B),
+                      color: Colors.white,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    _status,
+                    context.tr(_status),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF4A5761),
+                      color: Colors.white,
                       height: 1.45,
                     ),
                   ),
@@ -7442,7 +15394,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                     _phaseHint,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF63717C),
+                      color: Colors.white70,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -7452,7 +15404,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                     constraints: const BoxConstraints(minHeight: 240),
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.86),
+                      color: const Color(0xFF0F1A27).withValues(alpha: 0.92),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Center(
@@ -7467,11 +15419,11 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: <Widget>[
                                         Text(
-                                          'Utrwalanie',
+                                          context.tr('Utrwalanie'),
                                           textAlign: TextAlign.center,
                                           style: theme.textTheme.titleMedium
                                               ?.copyWith(
-                                                color: const Color(0xFF16212B),
+                                                color: Colors.white,
                                                 fontWeight: FontWeight.w900,
                                               ),
                                         ),
@@ -7512,9 +15464,7 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                                             ),
                                             style: theme.textTheme.displayMedium
                                                 ?.copyWith(
-                                                  color: const Color(
-                                                    0xFF16212B,
-                                                  ),
+                                                  color: Colors.white,
                                                   fontWeight: FontWeight.w900,
                                                 ),
                                           ),
@@ -7562,7 +15512,9 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                                   ),
                                   const SizedBox(height: 14),
                                   Text(
-                                    'Gratulacje, pamiętasz wszystkie cyfry na pamięć!',
+                                    context.tr(
+                                      'Gratulacje, pamiętasz wszystkie cyfry na pamięć!',
+                                    ),
                                     textAlign: TextAlign.center,
                                     style: theme.textTheme.headlineSmall
                                         ?.copyWith(
@@ -7584,20 +15536,11 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                                   ),
                                   const SizedBox(height: 14),
                                   Text(
-                                    'Losuj liczby z całej bazy',
+                                    context.tr('Losuj liczby z całej bazy'),
                                     textAlign: TextAlign.center,
                                     style: theme.textTheme.titleLarge?.copyWith(
-                                      color: const Color(0xFF16212B),
+                                      color: Colors.white,
                                       fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Po pierwszej rundzie zobaczysz już tylko cyfry oznaczone jako Nie.',
-                                    textAlign: TextAlign.center,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: const Color(0xFF4A5761),
-                                      height: 1.45,
                                     ),
                                   ),
                                 ],
@@ -7609,9 +15552,11 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                   if (_isCountingDown || _showingPrompt)
                     OutlinedButton(
                       onPressed: () => _pauseSession(
-                        'Trening zatrzymany. Możesz ruszyć dalej, kiedy chcesz.',
+                        context.tr(
+                          'Trening zatrzymany. Możesz ruszyć dalej, kiedy chcesz.',
+                        ),
                       ),
-                      child: const Text('Zatrzymaj'),
+                      child: Text(context.tr('Zatrzymaj')),
                     )
                   else
                     Wrap(
@@ -7623,16 +15568,16 @@ class _MnemonicVaultTrainerState extends State<MnemonicVaultTrainer> {
                           onPressed: _handleStartAction,
                           child: Text(
                             _finished
-                                ? 'Zagraj jeszcze raz'
+                                ? context.tr('Zagraj jeszcze raz')
                                 : _rounds == 0
-                                ? 'Start sesji'
-                                : 'Losuj dalej',
+                                ? context.tr('Start sesji')
+                                : context.tr('Losuj dalej'),
                           ),
                         ),
                         if (_history.isNotEmpty)
                           OutlinedButton(
                             onPressed: _resetTrainer,
-                            child: const Text('Wyczyść bieżącą sesję'),
+                            child: Text(context.tr('Wyczyść bieżącą sesję')),
                           ),
                       ],
                     ),
@@ -7691,7 +15636,7 @@ class _MnemonicRecallMetricCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            value,
+            context.tr(value),
             style: theme.textTheme.titleMedium?.copyWith(
               color: palette.primaryText,
               fontWeight: FontWeight.w900,
@@ -7904,7 +15849,7 @@ class _MnemonicRecallHistoryContentState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                'Historia wyników Recall',
+                context.tr('Historia wyników Recall'),
                 style: theme.textTheme.titleLarge?.copyWith(
                   color: palette.primaryText,
                   fontWeight: FontWeight.w900,
@@ -7912,7 +15857,9 @@ class _MnemonicRecallHistoryContentState
               ),
               const SizedBox(height: 6),
               Text(
-                'Tutaj zapisują się tylko trudne cyfry, czyli te które wróciły do dodatkowych rund. Widzisz pełną historię, dzień, godzinę, czas sesji i progres do czystej sesji bez problemów.',
+                context.tr(
+                  'Tutaj zapisują się tylko trudne cyfry, czyli te które wróciły do dodatkowych rund. Widzisz pełną historię, dzień, godzinę, czas sesji i progres do czystej sesji bez problemów.',
+                ),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: palette.secondaryText,
                   height: 1.45,
@@ -7934,7 +15881,9 @@ class _MnemonicRecallHistoryContentState
               border: Border.all(color: palette.surfaceBorder),
             ),
             child: Text(
-              'Nie ma jeszcze zapisanej historii. Zakończ pierwszą pełną sesję Recall, a skrzynia zacznie zbierać trudne cyfry wraz z datą i godziną.',
+              context.tr(
+                'Nie ma jeszcze zapisanej historii. Zakończ pierwszą pełną sesję Recall, a skrzynia zacznie zbierać trudne cyfry wraz z datą i godziną.',
+              ),
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: palette.secondaryText,
                 height: 1.5,
@@ -7945,14 +15894,14 @@ class _MnemonicRecallHistoryContentState
           _MnemonicRecallMetricCarousel(
             children: <Widget>[
               _MnemonicRecallMetricCard(
-                label: 'Ostatnia sesja',
+                label: context.tr('Ostatnia sesja'),
                 value: _digitCountLabel(latestSession!.problemDigitCount),
                 detail:
                     '${_formatSessionDateLabel(latestSession.dateKey)} • ${_formatSessionTimeLabel(latestSession.completedAtIso)}',
                 tint: widget.accent,
               ),
               _MnemonicRecallMetricCard(
-                label: 'Do czystej rundy',
+                label: context.tr('Do czystej rundy'),
                 value: _digitCountLabel(latestSession.problemDigitCount),
                 detail: _buildMnemonicRecallProgressDetail(latestSession),
                 tint: latestSession.problemDigitCount == 0
@@ -7960,12 +15909,23 @@ class _MnemonicRecallHistoryContentState
                     : const Color(0xFFD1802F),
               ),
               _MnemonicRecallMetricCard(
-                label: 'Zapisane sesje',
-                value:
-                    '${widget.sessionHistory.length} ${_memoryPluralLabel(widget.sessionHistory.length, singular: 'zapis', paucal: 'zapisy', plural: 'zapisów')}',
+                label: context.tr('Zapisane sesje'),
+                value: context.trf('{count} zapisów', <String, String>{
+                  'count': '${widget.sessionHistory.length}',
+                }),
                 detail: topRecurringDigit == null
-                    ? 'bez aktywnych problemów'
-                    : 'top cyfra ${_formatMnemonicNumber(topRecurringDigit.number)} • ${_mnemonicRecallMistakeCountLabel(topRecurringDigit.totalMistakes)}',
+                    ? context.tr('bez aktywnych problemów')
+                    : context.trf(
+                        'top cyfra {number} • {mistakes}',
+                        <String, String>{
+                          'number': _formatMnemonicNumber(
+                            topRecurringDigit.number,
+                          ),
+                          'mistakes': _mnemonicRecallMistakeCountLabel(
+                            topRecurringDigit.totalMistakes,
+                          ),
+                        },
+                      ),
                 tint: const Color(0xFF526A9E),
               ),
             ],
@@ -7987,8 +15947,8 @@ class _MnemonicRecallHistoryContentState
                     Expanded(
                       child: Text(
                         latestSession.problemDigitCount == 0
-                            ? 'Ostatnia sesja była czysta'
-                            : 'Progres do czystej rundy',
+                            ? context.tr('Ostatnia sesja była czysta')
+                            : context.tr('Progres do czystej rundy'),
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: palette.primaryText,
                           fontWeight: FontWeight.w800,
@@ -8021,8 +15981,18 @@ class _MnemonicRecallHistoryContentState
                 const SizedBox(height: 10),
                 Text(
                   latestSession.problemDigitCount == 0
-                      ? 'W ostatniej sesji żadna cyfra nie wróciła do poprawki. To jest stan docelowy.'
-                      : 'W ostatniej sesji zostało ${_digitCountLabel(latestSession.problemDigitCount)} do dopracowania, a ${_digitCountLabel(stableCount)} przeszło czysto od razu.',
+                      ? context.tr(
+                          'W ostatniej sesji żadna cyfra nie wróciła do poprawki. To jest stan docelowy.',
+                        )
+                      : context.trf(
+                          'W ostatniej sesji zostało {problemCount} do dopracowania, a {stableCount} przeszło czysto od razu.',
+                          <String, String>{
+                            'problemCount': _digitCountLabel(
+                              latestSession.problemDigitCount,
+                            ),
+                            'stableCount': _digitCountLabel(stableCount),
+                          },
+                        ),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: palette.secondaryText,
                     height: 1.45,
@@ -8034,8 +16004,8 @@ class _MnemonicRecallHistoryContentState
           const SizedBox(height: 18),
           Text(
             latestSession.problemDigits.isEmpty
-                ? 'Aktualnie bez problematycznych cyfr'
-                : 'Aktualnie problematyczne cyfry',
+                ? context.tr('Aktualnie bez problematycznych cyfr')
+                : context.tr('Aktualnie problematyczne cyfry'),
             style: theme.textTheme.titleSmall?.copyWith(
               color: palette.primaryText,
               fontWeight: FontWeight.w800,
@@ -8054,7 +16024,9 @@ class _MnemonicRecallHistoryContentState
                 ),
               ),
               child: Text(
-                'Ostatnia runda przeszła bez żadnej cyfry do poprawki. W historii niżej nadal możesz śledzić wcześniejsze problemy i tempo poprawy.',
+                context.tr(
+                  'Ostatnia runda przeszła bez żadnej cyfry do poprawki. W historii niżej nadal możesz śledzić wcześniejsze problemy i tempo poprawy.',
+                ),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: const Color(0xFF215C3D),
                   height: 1.45,
@@ -8078,7 +16050,7 @@ class _MnemonicRecallHistoryContentState
             ),
           const SizedBox(height: 18),
           Text(
-            'Najczęściej wracające cyfry',
+            context.tr('Najczęściej wracające cyfry'),
             style: theme.textTheme.titleSmall?.copyWith(
               color: palette.primaryText,
               fontWeight: FontWeight.w800,
@@ -8095,7 +16067,9 @@ class _MnemonicRecallHistoryContentState
                 border: Border.all(color: palette.surfaceBorder),
               ),
               child: Text(
-                'Na razie nie ma cyfr, które regularnie wracają jako problem w historii.',
+                context.tr(
+                  'Na razie nie ma cyfr, które regularnie wracają jako problem w historii.',
+                ),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: palette.secondaryText,
                   height: 1.45,
@@ -8130,7 +16104,7 @@ class _MnemonicRecallHistoryContentState
             ),
           const SizedBox(height: 18),
           Text(
-            'Historia wyników',
+            context.tr('Historia wyników'),
             style: theme.textTheme.titleSmall?.copyWith(
               color: palette.primaryText,
               fontWeight: FontWeight.w800,
@@ -8222,7 +16196,7 @@ class _MnemonicRecallRecurringDigitRow extends StatelessWidget {
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
-                        'aktywna',
+                        context.tr('aktywna'),
                         style: theme.textTheme.labelMedium?.copyWith(
                           color: _memoryFailureColor,
                           fontWeight: FontWeight.w800,
@@ -8233,7 +16207,18 @@ class _MnemonicRecallRecurringDigitRow extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${_mnemonicRecallMistakeCountLabel(aggregate.totalMistakes)} • ${aggregate.sessionsWithIssue} sesje • ostatnio ${_formatSessionDateTimeLabel(aggregate.lastSeenIso)}',
+                context.trf(
+                  '{mistakesLabel} • {sessions} sesje • ostatnio {lastSeen}',
+                  <String, String>{
+                    'mistakesLabel': _mnemonicRecallMistakeCountLabel(
+                      aggregate.totalMistakes,
+                    ),
+                    'sessions': '${aggregate.sessionsWithIssue}',
+                    'lastSeen': _formatSessionDateTimeLabel(
+                      aggregate.lastSeenIso,
+                    ),
+                  },
+                ),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: palette.secondaryText,
                   fontWeight: FontWeight.w700,
@@ -8258,7 +16243,7 @@ class _MnemonicRecallIssueChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = context.appPalette;
-    final label = _mnemonicDigitEntryByNumber[issue.number]?.label ?? 'brak';
+    final label = _mnemonicLabelForNumber(issue.number);
 
     return SizedBox(
       width: 148,
@@ -8298,7 +16283,9 @@ class _MnemonicRecallIssueChip extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
-                '${issue.misses}x problem',
+                context.trf('{misses}x problem', <String, String>{
+                  'misses': '${issue.misses}',
+                }),
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: _memoryFailureColor,
                   fontWeight: FontWeight.w800,
@@ -8386,7 +16373,7 @@ class _MnemonicRecallSessionCard extends StatelessWidget {
                 ),
                 child: Text(
                   record.problemDigitCount == 0
-                      ? 'czysto'
+                      ? context.tr('czysto')
                       : _digitCountLabel(record.problemDigitCount),
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: record.problemDigitCount == 0
@@ -8412,7 +16399,10 @@ class _MnemonicRecallSessionCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Stabilne $stableCount/${_mnemonicDigitEntries.length}',
+            context.trf('Stabilne {stable}/{total}', <String, String>{
+              'stable': '$stableCount',
+              'total': '${_mnemonicDigitEntries.length}',
+            }),
             style: theme.textTheme.labelLarge?.copyWith(
               color: palette.primaryText,
               fontWeight: FontWeight.w800,
@@ -8476,7 +16466,7 @@ class _MnemonicSprintTrainerState extends State<MnemonicSprintTrainer> {
         ? _buildExerciseSessionRoute<void>(
             builder: (BuildContext context) {
               return FullscreenTrainerPage(
-                title: 'Sprint skojarzeń',
+                title: context.tr('Sprint skojarzeń'),
                 accent: widget.accent,
                 expandBody: true,
                 showHeader: false,
@@ -8490,7 +16480,7 @@ class _MnemonicSprintTrainerState extends State<MnemonicSprintTrainer> {
         : MaterialPageRoute<void>(
             builder: (BuildContext context) {
               return Scaffold(
-                appBar: AppBar(title: const Text('Sprint skojarzeń')),
+                appBar: AppBar(title: Text(context.tr('Sprint skojarzeń'))),
                 body: session,
               );
             },
@@ -8526,7 +16516,7 @@ class _MnemonicSprintTrainerState extends State<MnemonicSprintTrainer> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'Sprint skojarzeń',
+            context.tr('Sprint skojarzeń'),
             style: theme.textTheme.titleMedium?.copyWith(
               color: palette.primaryText,
               fontWeight: FontWeight.w900,
@@ -8547,7 +16537,7 @@ class _MnemonicSprintTrainerState extends State<MnemonicSprintTrainer> {
                 Row(
                   children: <Widget>[
                     Text(
-                      'Oś tempa',
+                      context.tr('Oś tempa'),
                       style: theme.textTheme.titleSmall?.copyWith(
                         color: const Color(0xFF16212B),
                         fontWeight: FontWeight.w900,
@@ -8621,7 +16611,7 @@ class _MnemonicSprintTrainerState extends State<MnemonicSprintTrainer> {
               child: FilledButton(
                 key: const ValueKey<String>('mnemonic-sprint-start-button'),
                 onPressed: _openSession,
-                child: const Text('Start sprintu'),
+                child: Text(context.tr('Start sprintu')),
               ),
             ),
           ),
@@ -8682,7 +16672,11 @@ class _MnemonicSprintSessionViewState extends State<MnemonicSprintSessionView> {
     if (!_reading || _mnemonicDigitEntries.isEmpty) {
       return null;
     }
-    return _mnemonicDigitEntries[_currentEntryIndex];
+    final baseEntry = _mnemonicDigitEntries[_currentEntryIndex];
+    return _MnemonicDigitEntry(
+      number: baseEntry.number,
+      label: _mnemonicLabelForNumber(baseEntry.number),
+    );
   }
 
   int get _shownEntriesCount {
@@ -8699,9 +16693,6 @@ class _MnemonicSprintSessionViewState extends State<MnemonicSprintSessionView> {
 
   double get _progress =>
       (_shownEntriesCount / _mnemonicDigitEntries.length).clamp(0.0, 1.0);
-
-  int get _remainingEntriesCount =>
-      max(0, _mnemonicDigitEntries.length - _shownEntriesCount);
 
   void _startSession() {
     _finishExitTimer?.cancel();
@@ -8828,7 +16819,7 @@ class _MnemonicSprintSessionViewState extends State<MnemonicSprintSessionView> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Text(
-                'Sprint skojarzeń',
+                context.tr('Sprint skojarzeń'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineMedium?.copyWith(
                   color: const Color(0xFF102533),
@@ -8837,7 +16828,9 @@ class _MnemonicSprintSessionViewState extends State<MnemonicSprintSessionView> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Cyfry lecą jedna po drugiej bez przerwy, a pod każdą od razu widzisz przypisane skojarzenie.',
+                context.tr(
+                  'Cyfry lecą jedna po drugiej bez przerwy, a pod każdą od razu widzisz przypisane skojarzenie.',
+                ),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: const Color(0xFF5D7380),
@@ -8847,7 +16840,7 @@ class _MnemonicSprintSessionViewState extends State<MnemonicSprintSessionView> {
               const SizedBox(height: 20),
               FilledButton(
                 onPressed: _startSession,
-                child: const Text('Start'),
+                child: Text(context.tr('Start')),
               ),
             ],
           )
@@ -8857,7 +16850,7 @@ class _MnemonicSprintSessionViewState extends State<MnemonicSprintSessionView> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Text(
-                'Koniec sprintu',
+                context.tr('Koniec sprintu'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineMedium?.copyWith(
                   color: const Color(0xFF102533),
@@ -8866,7 +16859,9 @@ class _MnemonicSprintSessionViewState extends State<MnemonicSprintSessionView> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Masz za sobą pełny ciąg 0-100 bez zatrzymań po drodze.',
+                context.tr(
+                  'Masz za sobą pełny ciąg 0-100 bez zatrzymań po drodze.',
+                ),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: const Color(0xFF5D7380),
@@ -8938,114 +16933,61 @@ class _MnemonicSprintSessionViewState extends State<MnemonicSprintSessionView> {
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: Column(
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  IconButton(
-                    key: const ValueKey<String>('mnemonic-sprint-close'),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    color: const Color(0xFFEEF4F7),
-                    splashRadius: 24,
-                    icon: const Icon(Icons.close_rounded, size: 28),
-                  ),
-                  const Spacer(),
-                  Container(
-                    key: const ValueKey<String>('mnemonic-sprint-progress'),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF102533).withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.12),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: <Widget>[
-                        Text(
-                          '$_shownEntriesCount/${_mnemonicDigitEntries.length}',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: const Color(0xFFEEF4F7),
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'zostało $_remainingEntriesCount',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: const Color(
-                              0xFFEEF4F7,
-                            ).withValues(alpha: 0.82),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
               Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 540),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 28,
-                        vertical: 42,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 24,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: <Color>[Color(0xFFF9F3EA), Color(0xFFEDE2D2)],
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.46),
+                    ),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 34,
+                        offset: const Offset(0, 18),
                       ),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: <Color>[Color(0xFFF9F3EA), Color(0xFFEDE2D2)],
-                        ),
-                        borderRadius: BorderRadius.circular(34),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.46),
-                        ),
-                        boxShadow: <BoxShadow>[
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.18),
-                            blurRadius: 34,
-                            offset: const Offset(0, 18),
-                          ),
-                        ],
-                      ),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 320),
-                        child: Center(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 180),
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeInCubic,
-                            transitionBuilder:
-                                (Widget child, Animation<double> animation) {
-                                  return FadeTransition(
-                                    opacity: animation,
-                                    child: child,
-                                  );
-                                },
-                            child: stage,
-                          ),
-                        ),
-                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder:
+                          (Widget child, Animation<double> animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: child,
+                            );
+                          },
+                      child: stage,
                     ),
                   ),
                 ),
               ),
+              const SizedBox(height: 10),
               ClipRRect(
                 borderRadius: BorderRadius.circular(999),
                 child: LinearProgressIndicator(
-                  minHeight: 10,
+                  minHeight: 11,
                   value: _progress,
                   backgroundColor: Colors.white.withValues(alpha: 0.14),
-                  valueColor: AlwaysStoppedAnimation<Color>(widget.accent),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF29C25C),
+                  ),
                 ),
               ),
             ],
@@ -9187,12 +17129,10 @@ class _MnemonicSequenceStageHeader extends StatelessWidget {
   const _MnemonicSequenceStageHeader({
     required this.label,
     required this.accent,
-    this.secondaryLabel,
   });
 
   final String label;
   final Color accent;
-  final String? secondaryLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -9216,14 +17156,6 @@ class _MnemonicSequenceStageHeader extends StatelessWidget {
               ),
             ),
           ),
-          if (secondaryLabel != null)
-            Text(
-              secondaryLabel!,
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: accent,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
         ],
       ),
     );
@@ -9236,13 +17168,11 @@ class _MnemonicSequenceStageShell extends StatelessWidget {
     required this.accent,
     required this.label,
     required this.child,
-    this.secondaryLabel,
   });
 
   final Color accent;
   final String label;
   final Widget child;
-  final String? secondaryLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -9252,10 +17182,38 @@ class _MnemonicSequenceStageShell extends StatelessWidget {
         _MnemonicSequenceStageHeader(
           label: label,
           accent: accent,
-          secondaryLabel: secondaryLabel,
         ),
         const SizedBox(height: 24),
         child,
+      ],
+    );
+  }
+}
+
+class _MnemonicSequenceTimerHeader extends StatelessWidget {
+  const _MnemonicSequenceTimerHeader({
+    required this.accent,
+    required this.value,
+  });
+
+  final Color accent;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        Icon(Icons.timer_outlined, color: accent, size: 22),
+        const SizedBox(width: 8),
+        Text(
+          value,
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: accent,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
       ],
     );
   }
@@ -9335,14 +17293,14 @@ class _MnemonicSequenceAnswerGrid extends StatelessWidget {
                     : TextInputAction.next,
                 inputFormatters: <TextInputFormatter>[
                   FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(3),
+                  LengthLimitingTextInputFormatter(2),
                 ],
                 style: theme.textTheme.titleLarge?.copyWith(
                   color: const Color(0xFF16212B),
                   fontWeight: FontWeight.w900,
                 ),
                 decoration: InputDecoration(
-                  hintText: '${index + 1}',
+                  hintText: '',
                   counterText: '',
                   filled: true,
                   fillColor: fillColor,
@@ -9432,7 +17390,7 @@ class _MnemonicSequenceTrainerState extends State<MnemonicSequenceTrainer> {
         ? _buildExerciseSessionRoute<void>(
             builder: (BuildContext context) {
               return FullscreenTrainerPage(
-                title: 'Seria cyfr',
+                title: context.tr('Seria cyfr'),
                 accent: widget.accent,
                 expandBody: true,
                 showHeader: false,
@@ -9446,7 +17404,7 @@ class _MnemonicSequenceTrainerState extends State<MnemonicSequenceTrainer> {
         : MaterialPageRoute<void>(
             builder: (BuildContext context) {
               return Scaffold(
-                appBar: AppBar(title: const Text('Seria cyfr')),
+                appBar: AppBar(title: Text(context.tr('Seria cyfr'))),
                 body: session,
               );
             },
@@ -9459,7 +17417,6 @@ class _MnemonicSequenceTrainerState extends State<MnemonicSequenceTrainer> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = context.appPalette;
-    final int memorizeSeconds = _selectedMemorizeSeconds;
 
     return Container(
       width: double.infinity,
@@ -9490,26 +17447,6 @@ class _MnemonicSequenceTrainerState extends State<MnemonicSequenceTrainer> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Text(
-                      'Liczba elementów',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: palette.primaryText,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      _memoryElementCountLabel(_selectedItemCount),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: widget.accent,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
                 SliderTheme(
                   data: SliderTheme.of(context).copyWith(
                     activeTrackColor: widget.accent,
@@ -9545,14 +17482,6 @@ class _MnemonicSequenceTrainerState extends State<MnemonicSequenceTrainer> {
                     ),
                     const Spacer(),
                     Text(
-                      'oś długości',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: const Color(0xFF7A8791),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
                       '$_mnemonicSequenceMaxItems',
                       style: theme.textTheme.labelMedium?.copyWith(
                         color: const Color(0xFF7A8791),
@@ -9562,26 +17491,6 @@ class _MnemonicSequenceTrainerState extends State<MnemonicSequenceTrainer> {
                   ],
                 ),
                 const SizedBox(height: 18),
-                Row(
-                  children: <Widget>[
-                    Text(
-                      'Czas ekspozycji',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: const Color(0xFF16212B),
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '$memorizeSeconds s',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: widget.accent,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
                 SliderTheme(
                   data: SliderTheme.of(context).copyWith(
                     activeTrackColor: widget.accent,
@@ -9602,8 +17511,8 @@ class _MnemonicSequenceTrainerState extends State<MnemonicSequenceTrainer> {
                     divisions:
                         _mnemonicSequenceMaxMemorizeSeconds -
                         _mnemonicSequenceMinMemorizeSeconds,
-                    value: memorizeSeconds.toDouble(),
-                    label: '$memorizeSeconds s',
+                    value: _selectedMemorizeSeconds.toDouble(),
+                    label: '$_selectedMemorizeSeconds s',
                     onChanged: _setMemorizeSeconds,
                   ),
                 ),
@@ -9611,14 +17520,6 @@ class _MnemonicSequenceTrainerState extends State<MnemonicSequenceTrainer> {
                   children: <Widget>[
                     Text(
                       '$_mnemonicSequenceMinMemorizeSeconds',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: const Color(0xFF7A8791),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      'sekundy',
                       style: theme.textTheme.labelMedium?.copyWith(
                         color: const Color(0xFF7A8791),
                         fontWeight: FontWeight.w700,
@@ -9644,7 +17545,7 @@ class _MnemonicSequenceTrainerState extends State<MnemonicSequenceTrainer> {
               child: FilledButton(
                 key: const ValueKey<String>('mnemonic-sequence-start-button'),
                 onPressed: _openSession,
-                child: const Text('Start serii'),
+                child: Text(context.tr('Start serii')),
               ),
             ),
           ),
@@ -9678,6 +17579,10 @@ class MnemonicSequenceSessionView extends StatefulWidget {
 class _MnemonicSequenceSessionViewState
     extends State<MnemonicSequenceSessionView> {
   static const int _startCountdownSeconds = 3;
+  static const Duration _autoAdvanceAfterCorrectFeedback = Duration(
+    milliseconds: 2500,
+  );
+  static const Duration _autoExitAfterMistakeLimit = Duration(seconds: 2);
 
   final Random _random = Random();
   late final List<TextEditingController> _answerControllers;
@@ -9686,16 +17591,18 @@ class _MnemonicSequenceSessionViewState
   Timer? _countdownTimer;
   Timer? _memorizeTimer;
   Timer? _finishExitTimer;
+  Timer? _feedbackAdvanceTimer;
 
   _MnemonicSequencePhase _phase = _MnemonicSequencePhase.idle;
   _MnemonicSequencePhase? _pausedPhase;
   int _roundIndex = 0;
-  int _correctRounds = 0;
+  int _mistakeCount = 0;
   int? _countdownValue;
   int _memorizeSecondsRemaining = 0;
   List<int> _currentSequence = <int>[];
   List<int> _lastSubmittedSequence = <int>[];
   bool _lastAnswerCorrect = false;
+  bool _endedByMistakes = false;
   String _status = 'Start uruchamia serię 10 rund cyfr.';
 
   bool get _isCountingDown => _phase == _MnemonicSequencePhase.countdown;
@@ -9706,8 +17613,6 @@ class _MnemonicSequenceSessionViewState
   bool get _isFinished => _phase == _MnemonicSequencePhase.finished;
 
   int get _memorizeSeconds => widget.memorizeSeconds;
-
-  int get _displayRoundNumber => min(_roundIndex + 1, _mnemonicSequenceRounds);
 
   int get _completedRounds {
     if (_isFinished) {
@@ -9722,11 +17627,16 @@ class _MnemonicSequenceSessionViewState
   double get _progress =>
       (_completedRounds / _mnemonicSequenceRounds).clamp(0.0, 1.0);
 
-  int get _filledAnswerCount => _answerControllers
-      .where(
-        (TextEditingController controller) => controller.text.trim().isNotEmpty,
-      )
-      .length;
+  bool _isAnswerValueComplete(int index, String rawValue) {
+    if (index < 0 || index >= _currentSequence.length) {
+      return false;
+    }
+    final String value = rawValue.trim();
+    if (value.isEmpty) {
+      return false;
+    }
+    return value.length == _currentSequence[index].toString().length;
+  }
 
   bool get _canSubmit =>
       _readAnswerValues(requireAll: true).length == widget.itemCount;
@@ -9761,13 +17671,6 @@ class _MnemonicSequenceSessionViewState
     return value == 0 ? 'Start' : '$value';
   }
 
-  String get _progressLabel {
-    if (_isFinished) {
-      return '$_mnemonicSequenceRounds/$_mnemonicSequenceRounds';
-    }
-    return '$_displayRoundNumber/$_mnemonicSequenceRounds';
-  }
-
   @override
   void initState() {
     super.initState();
@@ -9792,6 +17695,7 @@ class _MnemonicSequenceSessionViewState
     _countdownTimer?.cancel();
     _memorizeTimer?.cancel();
     _finishExitTimer?.cancel();
+    _feedbackAdvanceTimer?.cancel();
   }
 
   void _clearAnswerFields() {
@@ -9803,13 +17707,17 @@ class _MnemonicSequenceSessionViewState
   List<int> _readAnswerValues({bool requireAll = false}) {
     final values = <int>[];
 
-    for (final TextEditingController controller in _answerControllers) {
+    for (var index = 0; index < _answerControllers.length; index += 1) {
+      final TextEditingController controller = _answerControllers[index];
       final String raw = controller.text.trim();
       if (raw.isEmpty) {
         if (requireAll) {
           return <int>[];
         }
         continue;
+      }
+      if (requireAll && !_isAnswerValueComplete(index, raw)) {
+        return <int>[];
       }
       final int? value = int.tryParse(raw);
       if (value == null || value < 0 || value > 100) {
@@ -9826,11 +17734,20 @@ class _MnemonicSequenceSessionViewState
   }
 
   List<int> _generateSequence() {
+    final availableNumbers = _mnemonicDigitEntries
+        .where((entry) => entry.number >= 10 && entry.number <= 99)
+        .toList(growable: false);
+    if (widget.itemCount <= availableNumbers.length) {
+      final shuffled = List<_MnemonicDigitEntry>.from(availableNumbers)
+        ..shuffle(_random);
+      return shuffled
+          .take(widget.itemCount)
+          .map((_MnemonicDigitEntry entry) => entry.number)
+          .toList(growable: false);
+    }
     return List<int>.generate(
       widget.itemCount,
-      (_) =>
-          _mnemonicDigitEntries[_random.nextInt(_mnemonicDigitEntries.length)]
-              .number,
+      (_) => availableNumbers[_random.nextInt(availableNumbers.length)].number,
     );
   }
 
@@ -9857,12 +17774,13 @@ class _MnemonicSequenceSessionViewState
       _phase = _MnemonicSequencePhase.countdown;
       _pausedPhase = null;
       _roundIndex = 0;
-      _correctRounds = 0;
+      _mistakeCount = 0;
       _countdownValue = _startCountdownSeconds;
       _memorizeSecondsRemaining = 0;
       _currentSequence = <int>[];
       _lastSubmittedSequence = <int>[];
       _lastAnswerCorrect = false;
+      _endedByMistakes = false;
       _status = 'Start za chwilę. Przygotuj się na pierwszą rundę.';
     });
 
@@ -10011,25 +17929,41 @@ class _MnemonicSequenceSessionViewState
     final answer = _readAnswerValues(requireAll: true);
     final bool correct = _sameSequence(answer, _currentSequence);
 
+    if (!correct) {
+      _mistakeCount += 1;
+      if (_mistakeCount >= 2) {
+        _finishSession(endedByMistakes: true);
+        return;
+      }
+    }
+
     FocusScope.of(context).unfocus();
     HapticFeedback.mediumImpact();
     setState(() {
       _phase = _MnemonicSequencePhase.feedback;
       _lastSubmittedSequence = answer;
       _lastAnswerCorrect = correct;
-      if (correct) {
-        _correctRounds += 1;
-      }
       _status = correct
           ? 'Dobrze. Kolejność się zgadza.'
           : 'Nie ta kolejność. Poprawny układ jest pokazany poniżej.';
     });
+
+    _feedbackAdvanceTimer?.cancel();
+    if (correct) {
+      _feedbackAdvanceTimer = Timer(_autoAdvanceAfterCorrectFeedback, () {
+        if (!mounted || !_isFeedback || !_lastAnswerCorrect) {
+          return;
+        }
+        _continueAfterFeedback();
+      });
+    }
   }
 
   void _continueAfterFeedback() {
     if (!_isFeedback) {
       return;
     }
+    _feedbackAdvanceTimer?.cancel();
 
     if (_roundIndex >= _mnemonicSequenceRounds - 1) {
       _finishSession();
@@ -10042,15 +17976,28 @@ class _MnemonicSequenceSessionViewState
     _beginRound();
   }
 
-  void _finishSession() {
+  void _finishSession({bool endedByMistakes = false}) {
     _cancelTimers();
     setState(() {
       _phase = _MnemonicSequencePhase.finished;
       _pausedPhase = null;
       _countdownValue = null;
       _memorizeSecondsRemaining = 0;
-      _status = 'Koniec serii.';
+      _endedByMistakes = endedByMistakes;
+      _status = endedByMistakes
+          ? context.tr('Koniec')
+          : context.tr('Koniec serii');
     });
+
+    if (endedByMistakes) {
+      _finishExitTimer = Timer(_autoExitAfterMistakeLimit, () {
+        if (!mounted) {
+          return;
+        }
+        Navigator.of(context).maybePop();
+      });
+      return;
+    }
 
     if (!widget.autoExitOnFinish) {
       return;
@@ -10111,7 +18058,7 @@ class _MnemonicSequenceSessionViewState
       }
     }
 
-    if (value.length == 3 && index < _answerFocusNodes.length - 1) {
+    if (value.length == 2 && index < _answerFocusNodes.length - 1) {
       _answerFocusNodes[index + 1].requestFocus();
     }
   }
@@ -10134,7 +18081,7 @@ class _MnemonicSequenceSessionViewState
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Text(
-            'Seria cyfr',
+            context.tr('Seria cyfr'),
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineMedium?.copyWith(
               color: const Color(0xFF102533),
@@ -10143,7 +18090,9 @@ class _MnemonicSequenceSessionViewState
           ),
           const SizedBox(height: 12),
           Text(
-            '10 rund, poziomy układ i wpisywanie całej sekwencji po zniknięciu cyfr.',
+            context.tr(
+              'Poziomy układ i wpisywanie całej sekwencji po zniknięciu cyfr.',
+            ),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: const Color(0xFF5D7380),
@@ -10151,45 +18100,40 @@ class _MnemonicSequenceSessionViewState
             ),
           ),
           const SizedBox(height: 20),
-          FilledButton(onPressed: _startSession, child: const Text('Start')),
+          FilledButton(onPressed: _startSession, child: Text(context.tr('Start'))),
         ],
       ),
-      _MnemonicSequencePhase.countdown => _MnemonicSequenceStageShell(
+      _MnemonicSequencePhase.countdown => Column(
         key: ValueKey<String>('mnemonic-sequence-countdown-$_roundIndex'),
-        accent: widget.accent,
-        label: 'Runda $_progressLabel',
-        child: _MemoryCountdownDisplay(
-          label: _countdownLabel,
-          accent: widget.accent,
-          valueKeyPrefix: 'mnemonic-sequence-countdown',
-        ),
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          _MemoryCountdownDisplay(
+            label: _countdownLabel,
+            accent: widget.accent,
+            valueKeyPrefix: 'mnemonic-sequence-countdown',
+          ),
+        ],
       ),
-      _MnemonicSequencePhase.memorizing => _MnemonicSequenceStageShell(
+      _MnemonicSequencePhase.memorizing => Column(
         key: ValueKey<String>('mnemonic-sequence-round-$_roundIndex'),
-        accent: widget.accent,
-        label: 'Runda $_progressLabel',
-        secondaryLabel: '${_memorizeSecondsRemaining}s',
-        child: _MnemonicNumberSequenceStrip(
-          numbers: _currentSequence,
-          accent: widget.accent,
-        ),
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          _MnemonicSequenceTimerHeader(
+            accent: widget.accent,
+            value: '$_memorizeSecondsRemaining',
+          ),
+          const SizedBox(height: 24),
+          _MnemonicNumberSequenceStrip(
+            numbers: _currentSequence,
+            accent: widget.accent,
+          ),
+        ],
       ),
-      _MnemonicSequencePhase.answering => _MnemonicSequenceStageShell(
+      _MnemonicSequencePhase.answering => Container(
         key: ValueKey<String>('mnemonic-sequence-answer-$_roundIndex'),
-        accent: widget.accent,
-        label: 'Runda $_progressLabel',
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text(
-              'Wpisz układ',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.headlineSmall?.copyWith(
-                color: const Color(0xFF102533),
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 18),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 620),
               child: _MnemonicSequenceAnswerGrid(
@@ -10202,74 +18146,84 @@ class _MnemonicSequenceSessionViewState
               ),
             ),
             const SizedBox(height: 14),
-            Text(
-              '$_filledAnswerCount/${widget.itemCount}',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: widget.accent,
-                fontWeight: FontWeight.w900,
-              ),
+            FilledButton(
+              onPressed: _canSubmit ? _submitAnswer : null,
+              child: Text(context.tr('Sprawdź')),
             ),
           ],
         ),
       ),
-      _MnemonicSequencePhase.feedback => _MnemonicSequenceStageShell(
+      _MnemonicSequencePhase.feedback => Container(
         key: ValueKey<String>(
           'mnemonic-sequence-feedback-${_lastAnswerCorrect ? 'ok' : 'fail'}-$_roundIndex',
         ),
-        accent: widget.accent,
-        label: 'Runda $_progressLabel',
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            _MemoryRoundFeedbackBadge(
-              success: _lastAnswerCorrect,
-              successIcon: Icons.verified_rounded,
-              failureIcon: Icons.replay_circle_filled_rounded,
-            ),
-            const SizedBox(height: 18),
-            Text(
-              _lastAnswerCorrect ? 'Dobra odpowiedź' : 'Nie ten układ',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.headlineSmall?.copyWith(
-                color: const Color(0xFF102533),
-                fontWeight: FontWeight.w900,
+            if (_lastAnswerCorrect) ...<Widget>[
+              const Icon(
+                Icons.check_circle_rounded,
+                size: 84,
+                color: Color(0xFF29C25C),
               ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Poprawna sekwencja',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: widget.accent,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 10),
-            _MnemonicNumberSequenceStrip(
-              numbers: _currentSequence,
-              accent: widget.accent,
-              compact: true,
-            ),
-            if (!_lastAnswerCorrect &&
-                _lastSubmittedSequence.isNotEmpty) ...<Widget>[
               const SizedBox(height: 16),
               Text(
-                'Twoja odpowiedź',
+                context.tr('Do przodu'),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: const Color(0xFF102533),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ] else ...<Widget>[
+              _MemoryRoundFeedbackBadge(
+                success: _lastAnswerCorrect,
+                successIcon: Icons.verified_rounded,
+                failureIcon: Icons.close_rounded,
+              ),
+              const SizedBox(height: 18),
+              Text(
+                context.tr('Nie ten układ'),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: const Color(0xFF102533),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                context.tr('Poprawna sekwencja'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.labelLarge?.copyWith(
-                  color: const Color(0xFF63717C),
+                  color: widget.accent,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 0.5,
                 ),
               ),
               const SizedBox(height: 10),
               _MnemonicNumberSequenceStrip(
-                numbers: _lastSubmittedSequence,
-                accent: const Color(0xFF8D98A1),
+                numbers: _currentSequence,
+                accent: widget.accent,
                 compact: true,
               ),
+              if (_lastSubmittedSequence.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 16),
+                Text(
+                  context.tr('Twoja odpowiedź'),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: const Color(0xFF63717C),
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _MnemonicNumberSequenceStrip(
+                  numbers: _lastSubmittedSequence,
+                  accent: const Color(0xFF8D98A1),
+                  compact: true,
+                ),
+              ],
             ],
           ],
         ),
@@ -10277,7 +18231,7 @@ class _MnemonicSequenceSessionViewState
       _MnemonicSequencePhase.paused => _MnemonicSequenceStageShell(
         key: const ValueKey<String>('mnemonic-sequence-paused'),
         accent: widget.accent,
-        label: 'Runda $_progressLabel',
+        label: 'Pauza',
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
@@ -10308,40 +18262,33 @@ class _MnemonicSequenceSessionViewState
           ],
         ),
       ),
-      _MnemonicSequencePhase.finished => _MnemonicSequenceStageShell(
+      _MnemonicSequencePhase.finished => Container(
         key: const ValueKey<String>('mnemonic-sequence-finished'),
-        accent: widget.accent,
-        label: 'Wynik $_progressLabel',
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Text(
-              'Koniec serii',
+              _endedByMistakes
+                  ? context.tr('Koniec')
+                  : context.tr('Koniec serii'),
               textAlign: TextAlign.center,
               style: theme.textTheme.headlineMedium?.copyWith(
                 color: const Color(0xFF102533),
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Trafione rundy: $_correctRounds/$_mnemonicSequenceRounds',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: widget.accent,
-                fontWeight: FontWeight.w900,
+            if (!_endedByMistakes) ...<Widget>[
+              const SizedBox(height: 12),
+              Text(
+                '${_memoryElementCountLabel(widget.itemCount)} w rundzie • ekspozycja $_memorizeSeconds s',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFF5D7380),
+                  fontWeight: FontWeight.w700,
+                  height: 1.4,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '${_memoryElementCountLabel(widget.itemCount)} w rundzie • ekspozycja $_memorizeSeconds s',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF5D7380),
-                fontWeight: FontWeight.w700,
-                height: 1.4,
-              ),
-            ),
+            ],
           ],
         ),
       ),
@@ -10349,37 +18296,24 @@ class _MnemonicSequenceSessionViewState
 
     final List<Widget> controlButtons = switch (_phase) {
       _MnemonicSequencePhase.idle => <Widget>[
-        FilledButton(onPressed: _startSession, child: const Text('Start')),
+        FilledButton(onPressed: _startSession, child: Text(context.tr('Start'))),
       ],
       _MnemonicSequencePhase.countdown ||
-      _MnemonicSequencePhase.memorizing => <Widget>[
-        OutlinedButton.icon(
-          onPressed: _pauseSession,
-          icon: const Icon(Icons.pause_circle_outline_rounded),
-          label: const Text('Pauza'),
-        ),
-      ],
-      _MnemonicSequencePhase.answering => <Widget>[
-        OutlinedButton.icon(
-          onPressed: _pauseSession,
-          icon: const Icon(Icons.pause_circle_outline_rounded),
-          label: const Text('Pauza'),
-        ),
-        FilledButton(
-          onPressed: _canSubmit ? _submitAnswer : null,
-          child: const Text('Sprawdź'),
-        ),
-      ],
-      _MnemonicSequencePhase.feedback => <Widget>[
-        FilledButton(
-          onPressed: _continueAfterFeedback,
-          child: Text(
-            _roundIndex >= _mnemonicSequenceRounds - 1
-                ? 'Pokaż wynik'
-                : 'Następna runda',
-          ),
-        ),
-      ],
+      _MnemonicSequencePhase.memorizing => <Widget>[],
+      _MnemonicSequencePhase.answering => <Widget>[],
+      _MnemonicSequencePhase.feedback =>
+        _lastAnswerCorrect
+            ? <Widget>[]
+            : <Widget>[
+                FilledButton(
+                  onPressed: _continueAfterFeedback,
+                  child: Text(
+                    _roundIndex >= _mnemonicSequenceRounds - 1
+                        ? context.tr('Pokaż wynik')
+                        : context.tr('Następna runda'),
+                  ),
+                ),
+              ],
       _MnemonicSequencePhase.paused => <Widget>[
         FilledButton.icon(
           onPressed: _resumeSession,
@@ -10392,11 +18326,12 @@ class _MnemonicSequenceSessionViewState
         ),
       ],
       _MnemonicSequencePhase.finished => <Widget>[
-        FilledButton.icon(
-          onPressed: _startSession,
-          icon: const Icon(Icons.replay_rounded),
-          label: const Text('Jeszcze raz'),
-        ),
+        if (!_endedByMistakes)
+          FilledButton.icon(
+            onPressed: _startSession,
+            icon: const Icon(Icons.replay_rounded),
+            label: const Text('Jeszcze raz'),
+          ),
       ],
     };
 
@@ -10414,120 +18349,101 @@ class _MnemonicSequenceSessionViewState
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: Column(
             children: <Widget>[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  key: const ValueKey<String>('mnemonic-sequence-close'),
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  color: const Color(0xFFEEF4F7),
-                  splashRadius: 24,
-                  icon: const Icon(Icons.close_rounded, size: 28),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 24,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: <Color>[Color(0xFFF9F3EA), Color(0xFFEDE2D2)],
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.46),
+                    ),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 34,
+                        offset: const Offset(0, 18),
+                      ),
+                    ],
+                  ),
+                  child: LayoutBuilder(
+                    builder:
+                        (BuildContext context, BoxConstraints constraints) {
+                          final double minHeight = constraints.hasBoundedHeight
+                              ? constraints.maxHeight
+                              : 0;
+                          return SingleChildScrollView(
+                            padding: EdgeInsets.only(
+                              bottom:
+                                  MediaQuery.viewInsetsOf(context).bottom + 12,
+                            ),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(minHeight: minHeight),
+                              child: Center(
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 180),
+                                  switchInCurve: Curves.easeOutCubic,
+                                  switchOutCurve: Curves.easeInCubic,
+                                  transitionBuilder:
+                                      (
+                                        Widget child,
+                                        Animation<double> animation,
+                                      ) {
+                                        return FadeTransition(
+                                          opacity: animation,
+                                          child: child,
+                                        );
+                                      },
+                                  child: stage,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                  ),
                 ),
               ),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 920),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 30,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: <Color>[Color(0xFFF9F3EA), Color(0xFFEDE2D2)],
-                        ),
-                        borderRadius: BorderRadius.circular(34),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.46),
-                        ),
-                        boxShadow: <BoxShadow>[
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.18),
-                            blurRadius: 34,
-                            offset: const Offset(0, 18),
-                          ),
-                        ],
-                      ),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 300),
-                        child: LayoutBuilder(
-                          builder:
-                              (
-                                BuildContext context,
-                                BoxConstraints constraints,
-                              ) {
-                                final double minHeight =
-                                    constraints.hasBoundedHeight
-                                    ? max(300.0, constraints.maxHeight)
-                                    : 300.0;
-
-                                return SingleChildScrollView(
-                                  child: ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      minHeight: minHeight,
-                                    ),
-                                    child: Center(
-                                      child: AnimatedSwitcher(
-                                        duration: const Duration(
-                                          milliseconds: 180,
-                                        ),
-                                        switchInCurve: Curves.easeOutCubic,
-                                        switchOutCurve: Curves.easeInCubic,
-                                        transitionBuilder:
-                                            (
-                                              Widget child,
-                                              Animation<double> animation,
-                                            ) {
-                                              return FadeTransition(
-                                                opacity: animation,
-                                                child: child,
-                                              );
-                                            },
-                                        child: stage,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                        ),
-                      ),
+              const SizedBox(height: 10),
+              if (controlButtons.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF102533).withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
                     ),
                   ),
-                ),
-              ),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF102533).withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.12),
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: controlButtons,
                   ),
                 ),
-                child: Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: controlButtons,
-                ),
-              ),
-              const SizedBox(height: 16),
+              if (controlButtons.isNotEmpty) const SizedBox(height: 16),
               ClipRRect(
                 borderRadius: BorderRadius.circular(999),
                 child: LinearProgressIndicator(
                   key: const ValueKey<String>('mnemonic-sequence-progress'),
-                  minHeight: 10,
+                  minHeight: 11,
                   value: _progress,
                   backgroundColor: Colors.white.withValues(alpha: 0.14),
-                  valueColor: AlwaysStoppedAnimation<Color>(widget.accent),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF29C25C),
+                  ),
                 ),
               ),
             ],
@@ -11400,7 +19316,7 @@ class _VoiceDrillDemoState extends State<_VoiceDrillDemo> {
       _buildExerciseSessionRoute<void>(
         builder: (BuildContext context) {
           return FullscreenTrainerPage(
-            title: 'Voice • ${widget.definition.title}',
+            title: 'Voice • ${context.tr(widget.definition.title)}',
             accent: widget.accent,
             child: _VoiceDrillDemo(
               definition: widget.definition,
@@ -11745,6 +19661,42 @@ PageRoute<T> _buildExerciseSessionRoute<T>({required WidgetBuilder builder}) {
   );
 }
 
+PageRoute<T> _buildMindeNoteRoute<T>({required WidgetBuilder builder}) {
+  return PageRouteBuilder<T>(
+    transitionDuration: const Duration(milliseconds: 320),
+    reverseTransitionDuration: const Duration(milliseconds: 260),
+    pageBuilder:
+        (
+          BuildContext context,
+          Animation<double> animation,
+          Animation<double> secondaryAnimation,
+        ) {
+          return builder(context);
+        },
+    transitionsBuilder:
+        (
+          BuildContext context,
+          Animation<double> animation,
+          Animation<double> secondaryAnimation,
+          Widget child,
+        ) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          final slide = Tween<Offset>(
+            begin: const Offset(0, 0.035),
+            end: Offset.zero,
+          ).animate(curved);
+          return FadeTransition(
+            opacity: curved,
+            child: SlideTransition(position: slide, child: child),
+          );
+        },
+  );
+}
+
 Future<void> _enterFullscreenSessionMode() {
   return SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 }
@@ -11900,11 +19852,13 @@ class ExercisePreviewCard extends StatelessWidget {
     required this.definition,
     required this.isCompleted,
     required this.onOpen,
+    this.isLocked = false,
   });
 
   final ExerciseDefinition definition;
   final bool isCompleted;
   final VoidCallback onOpen;
+  final bool isLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -11943,14 +19897,14 @@ class ExercisePreviewCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
-                          definition.title,
+                          definition.titleT(context),
                           style: theme.textTheme.titleLarge?.copyWith(
                             color: palette.primaryText,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          definition.subtitle,
+                          definition.subtitleT(context),
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: palette.secondaryText,
                           ),
@@ -11976,7 +19930,8 @@ class ExercisePreviewCard extends StatelessWidget {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: definition.tags
+                children: definition
+                    .tagsT(context)
                     .map(
                       (String tag) =>
                           TagChip(label: tag, tint: definition.accent),
@@ -11988,14 +19943,17 @@ class ExercisePreviewCard extends StatelessWidget {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      '${definition.duration} • ${definition.idealMoment}',
+                      '${definition.durationT(context)} • ${definition.idealMomentT(context)}',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: palette.secondaryText,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                  FilledButton(onPressed: onOpen, child: const Text('Otwórz')),
+                  FilledButton(
+                    onPressed: onOpen,
+                    child: Text(context.tr('Otwórz')),
+                  ),
                 ],
               ),
             ],
@@ -12013,16 +19971,22 @@ class AppBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.appPalette;
     final backdropId = context.appBackdropId;
+    final isLightCubesMode =
+        palette.id == _AppThemeId.liquidGlass &&
+        backdropId == _AppBackdropId.warriorSpears;
+    final gradientColors = isLightCubesMode
+        ? const <Color>[Color(0xFFE2E8F2), Color(0xFFD2DCE9), Color(0xFFC3D0E0)]
+        : <Color>[
+            palette.backdropStart,
+            palette.backdropMiddle,
+            palette.backdropEnd,
+          ];
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: <Color>[
-            palette.backdropStart,
-            palette.backdropMiddle,
-            palette.backdropEnd,
-          ],
+          colors: gradientColors,
         ),
       ),
       child: Stack(
@@ -12071,6 +20035,9 @@ class _BackdropPatternLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isWhiteCubesMode =
+        backdropId == _AppBackdropId.warriorSpears &&
+        palette.id == _AppThemeId.liquidGlass;
     final primaryPatternColor = palette.heroText.withValues(
       alpha: compact ? 0.08 : 0.1,
     );
@@ -12233,9 +20200,15 @@ class _BackdropPatternLayer extends StatelessWidget {
         ),
         _AppBackdropId.warriorSpears => CustomPaint(
           painter: _Backdrop3DCubesPainter(
-            lineColor: primaryPatternColor,
-            accentColor: accentPatternColor,
-            softColor: accentSoftPatternColor,
+            lineColor: isWhiteCubesMode
+                ? Colors.white.withValues(alpha: compact ? 0.48 : 0.62)
+                : primaryPatternColor,
+            accentColor: isWhiteCubesMode
+                ? Colors.white.withValues(alpha: compact ? 0.28 : 0.4)
+                : accentPatternColor,
+            softColor: isWhiteCubesMode
+                ? Colors.white.withValues(alpha: compact ? 0.2 : 0.3)
+                : accentSoftPatternColor,
             compact: compact,
           ),
         ),
@@ -14608,7 +22581,7 @@ class _FlowSavedProgressTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      label,
+                      context.tr(label),
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: palette.primaryText,
                         fontWeight: FontWeight.w800,
@@ -14616,7 +22589,7 @@ class _FlowSavedProgressTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      subtitle,
+                      context.tr(subtitle),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: palette.secondaryText,
                       ),
@@ -14654,7 +22627,7 @@ class SectionHeader extends StatelessWidget {
           : CrossAxisAlignment.start,
       children: <Widget>[
         Text(
-          eyebrow.toUpperCase(),
+          context.tr(eyebrow).toUpperCase(),
           textAlign: centered ? TextAlign.center : TextAlign.start,
           style: theme.textTheme.labelLarge?.copyWith(
             color: palette.tertiaryText,
@@ -14664,7 +22637,7 @@ class SectionHeader extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          title,
+          context.tr(title),
           textAlign: centered ? TextAlign.center : TextAlign.start,
           style: theme.textTheme.titleLarge?.copyWith(
             color: palette.primaryText,
@@ -14707,7 +22680,7 @@ class DailyRoutineStep extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                title,
+                context.tr(title),
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: palette.primaryText,
                   fontWeight: FontWeight.w800,
@@ -14715,7 +22688,7 @@ class DailyRoutineStep extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                details,
+                context.tr(details),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: palette.secondaryText,
                 ),
@@ -14744,7 +22717,7 @@ class TagChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        label,
+        context.tr(label),
         style: TextStyle(
           color: Color.lerp(tint, palette.primaryText, 0.18),
           fontWeight: FontWeight.w800,
@@ -14782,7 +22755,7 @@ class DetailMetric extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            label.toUpperCase(),
+            context.tr(label).toUpperCase(),
             style: theme.textTheme.labelLarge?.copyWith(
               color: palette.heroMutedText,
               fontWeight: FontWeight.w800,
@@ -14791,7 +22764,7 @@ class DetailMetric extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            value,
+            context.tr(value),
             style: theme.textTheme.bodyLarge?.copyWith(
               color: palette.heroText,
               fontWeight: FontWeight.w700,
@@ -14840,7 +22813,7 @@ class InstructionStep extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            text,
+            context.tr(text),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: palette.primaryText,
@@ -14869,7 +22842,7 @@ class InstructionStep extends StatelessWidget {
         const SizedBox(width: 14),
         Expanded(
           child: Text(
-            text,
+            context.tr(text),
             style: theme.textTheme.bodyLarge?.copyWith(
               color: palette.primaryText,
             ),
@@ -14987,7 +22960,10 @@ class _PulseSyncLevelSelectorCardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const SectionHeader(eyebrow: 'Poziomy', title: 'Poziomy gry'),
+          SectionHeader(
+            eyebrow: context.tr('Poziomy'),
+            title: context.tr('Poziomy gry'),
+          ),
           const SizedBox(height: 18),
           Container(
             width: double.infinity,
@@ -15036,7 +23012,7 @@ class _PulseSyncLevelSelectorCardState
                           ),
                           child: Center(
                             child: Text(
-                              level.label,
+                              context.tr(level.label),
                               textAlign: TextAlign.center,
                               style: theme.textTheme.titleLarge?.copyWith(
                                 color: palette.primaryText,
@@ -15086,6 +23062,7 @@ class PulseSyncTrainer extends StatefulWidget {
     this.autoStart = false,
     this.fullscreenOnStart = false,
     this.autoExitOnFinish = false,
+    this.immersiveLayout = false,
     this.initialLevel = PulseSyncLevel.easy,
     this.showLevelSelector = true,
     this.onSessionStarted,
@@ -15095,6 +23072,7 @@ class PulseSyncTrainer extends StatefulWidget {
   final bool autoStart;
   final bool fullscreenOnStart;
   final bool autoExitOnFinish;
+  final bool immersiveLayout;
   final PulseSyncLevel initialLevel;
   final bool showLevelSelector;
   final VoidCallback? onSessionStarted;
@@ -15120,7 +23098,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
   int _remainingSeconds = _sessionSeconds;
   int _beatCount = 0;
   int _points = 0;
-  String _status = 'Wybierz poziom i uruchom minutę rytmu.';
+  String _status = '';
   DateTime? _lastBeatAt;
   DateTime? _nextBeatAt;
 
@@ -15138,6 +23116,15 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_status.isNotEmpty) {
+      return;
+    }
+    _status = context.tr('Wybierz poziom i uruchom minutę rytmu.');
+  }
+
+  @override
   void didUpdateWidget(covariant PulseSyncTrainer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.initialLevel == oldWidget.initialLevel ||
@@ -15150,7 +23137,10 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
       _selectedLevel = widget.initialLevel;
       _finished = false;
       _remainingSeconds = _sessionSeconds;
-      _status = 'Poziom ${_currentLevel.label}. Kliknij start i złap rytm.';
+      _status = context.trf(
+        'Poziom {level}. Kliknij start i złap rytm.',
+        <String, String>{'level': context.tr(_currentLevel.label)},
+      );
     });
   }
 
@@ -15167,7 +23157,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
     if (value == null) {
       return '';
     }
-    return value == 0 ? 'START' : '$value';
+    return value == 0 ? context.tr('START') : '$value';
   }
 
   int get _stageIndex =>
@@ -15190,7 +23180,10 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
       _selectedLevel = level;
       _finished = false;
       _remainingSeconds = _sessionSeconds;
-      _status = 'Poziom ${definition.label}. Kliknij start i złap rytm.';
+      _status = context.trf(
+        'Poziom {level}. Kliknij start i złap rytm.',
+        <String, String>{'level': context.tr(definition.label)},
+      );
     });
 
     HapticFeedback.selectionClick();
@@ -15211,7 +23204,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
       _remainingSeconds = _sessionSeconds;
       _beatCount = 0;
       _points = 0;
-      _status = 'Start za 3 sekundy. Przygotuj rytm dłoni.';
+      _status = context.tr('Start za 3 sekundy. Przygotuj rytm dłoni.');
       _lastBeatAt = null;
       _nextBeatAt = null;
     });
@@ -15260,7 +23253,9 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
       _remainingSeconds = _sessionSeconds;
       _beatCount = 0;
       _points = 0;
-      _status = 'Stukaj wtedy, gdy koło wybija puls i daje haptykę.';
+      _status = context.tr(
+        'Stukaj wtedy, gdy koło wybija puls i daje haptykę.',
+      );
       _lastBeatAt = null;
       _nextBeatAt = null;
     });
@@ -15291,7 +23286,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
       _pulseExpanded = false;
       _countdownValue = null;
       _remainingSeconds = 0;
-      _status = 'Koniec';
+      _status = context.tr('Koniec');
     });
 
     if (!widget.autoExitOnFinish) {
@@ -15312,7 +23307,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
       _running = false;
       _pulseExpanded = false;
       _countdownValue = null;
-      _status = 'Pauza. Wróć, gdy chcesz ponownie wejść w rytm.';
+      _status = context.tr('Pauza. Wróć, gdy chcesz ponownie wejść w rytm.');
     });
   }
 
@@ -15359,12 +23354,18 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
       _buildExerciseSessionRoute<void>(
         builder: (BuildContext context) {
           return FullscreenTrainerPage(
-            title: 'Pulse Sync',
+            title: context.tr('Pulse Sync'),
             accent: widget.accent,
+            expandBody: true,
+            showHeader: false,
+            wrapChildInSurfaceCard: false,
+            contentMaxWidth: null,
+            bodyPadding: EdgeInsets.zero,
             child: PulseSyncTrainer(
               accent: widget.accent,
               autoStart: true,
               autoExitOnFinish: true,
+              immersiveLayout: true,
               initialLevel: _selectedLevel,
               showLevelSelector: widget.showLevelSelector,
             ),
@@ -15375,6 +23376,16 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
   }
 
   Future<void> _handlePrimaryAction() async {
+    if (!_running && !_isCountingDown) {
+      final hasAccess = await _ensureSubscriptionAccess(
+        context,
+        exerciseTitle: context.tr('Pulse Sync'),
+      );
+      if (!hasAccess) {
+        return;
+      }
+    }
+
     if (widget.fullscreenOnStart && !_running && !_isCountingDown) {
       widget.onSessionStarted?.call();
       await _openFullscreenSession();
@@ -15398,12 +23409,17 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
     final deltaNext = _nextBeatAt!.difference(now).inMilliseconds.abs();
     final delta = min(deltaLast, deltaNext);
 
-    var message = 'Poza pulsem. Złap koło i pozwól rytmowi wejść głębiej.';
+    var message = context.tr(
+      'Poza pulsem. Złap koło i pozwól rytmowi wejść głębiej.',
+    );
 
     if (delta <= 90) {
       setState(() {
         _points += 1;
-        _status = 'Idealnie. Punkt zapisany. Błąd: $delta ms.';
+        _status = context.trf(
+          'Idealnie. Punkt zapisany. Błąd: {delta} ms.',
+          <String, String>{'delta': '$delta'},
+        );
       });
       HapticFeedback.mediumImpact();
       return;
@@ -15412,14 +23428,20 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
     if (delta <= 160) {
       setState(() {
         _points += 1;
-        _status = 'Dobry tap. Punkt zapisany. Błąd: $delta ms.';
+        _status = context.trf(
+          'Dobry tap. Punkt zapisany. Błąd: {delta} ms.',
+          <String, String>{'delta': '$delta'},
+        );
       });
       HapticFeedback.selectionClick();
       return;
     }
 
     setState(() {
-      _status = '$message Błąd: $delta ms.';
+      _status = context.trf('{message} Błąd: {delta} ms.', <String, String>{
+        'message': message,
+        'delta': '$delta',
+      });
     });
     HapticFeedback.lightImpact();
   }
@@ -15432,7 +23454,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
       children: _pulseSyncLevels.map((_PulseSyncLevelDefinition level) {
         final selected = level.level == _selectedLevel;
         return ChoiceChip(
-          label: Text(level.label),
+          label: Text(context.tr(level.label)),
           selected: selected,
           onSelected: (_) => _selectLevel(level.level),
           selectedColor: widget.accent.withValues(alpha: 0.18),
@@ -15459,7 +23481,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
           borderRadius: BorderRadius.circular(26),
         ),
         child: Text(
-          'Koniec',
+          context.tr('Koniec'),
           style: theme.textTheme.headlineMedium?.copyWith(
             color: palette.primaryText,
             fontWeight: FontWeight.w900,
@@ -15470,7 +23492,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
     }
 
     if (_isCountingDown) {
-      final showCountdownHeading = _countdownLabel != 'START';
+      final showCountdownHeading = _countdownLabel != context.tr('START');
 
       return Column(
         key: ValueKey<String>('pulse-sync-countdown-$_countdownLabel'),
@@ -15478,7 +23500,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
         children: <Widget>[
           if (showCountdownHeading) ...<Widget>[
             Text(
-              'START ZA',
+              context.tr('START ZA'),
               style: theme.textTheme.titleLarge?.copyWith(
                 color: palette.secondaryText,
                 fontWeight: FontWeight.w800,
@@ -15492,7 +23514,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
             style: theme.textTheme.displaySmall?.copyWith(
               color: widget.accent,
               fontWeight: FontWeight.w900,
-              letterSpacing: _countdownLabel == 'START' ? 1.4 : 0.0,
+              letterSpacing: _countdownLabel == context.tr('START') ? 1.4 : 0.0,
             ),
           ),
         ],
@@ -15531,7 +23553,7 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
             ),
             alignment: Alignment.center,
             child: Text(
-              _running ? 'TAP' : 'FLOW',
+              context.tr('TAP'),
               style: theme.textTheme.headlineMedium?.copyWith(
                 color: Colors.white,
                 fontWeight: FontWeight.w900,
@@ -15552,13 +23574,117 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
         const SizedBox(height: 8),
         Text(
           _running
-              ? 'Wibracje są aktywne na pulsie i przy dobrych trafieniach.'
+              ? context.tr(
+                  'Wibracje są aktywne na pulsie i przy dobrych trafieniach.',
+                )
               : widget.showLevelSelector
-              ? 'Masz 3 poziomy tempa. Wybierz poziom i kliknij start.'
-              : 'Kliknij start i złap rytm.',
+              ? context.tr(
+                  'Masz 3 poziomy tempa. Wybierz poziom i kliknij start.',
+                )
+              : context.tr('Kliknij start i złap rytm.'),
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(
             color: palette.tertiaryText,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImmersiveSessionBody(ThemeData theme) {
+    final palette = context.appPalette;
+
+    if (_finished) {
+      return Center(
+        child: Container(
+          key: const ValueKey<String>('pulse-sync-finished-immersive'),
+          padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 22),
+          decoration: BoxDecoration(
+            color: widget.accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(26),
+          ),
+          child: Text(
+            context.tr('Koniec'),
+            style: theme.textTheme.headlineMedium?.copyWith(
+              color: palette.primaryText,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_isCountingDown) {
+      return Center(child: _buildSessionBody(theme));
+    }
+
+    return Stack(
+      children: <Widget>[
+        Center(
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 140),
+            scale: _pulseExpanded ? 1.08 : 0.9,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              width: 200,
+              height: 200,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: <Color>[
+                    widget.accent.withValues(alpha: 0.24),
+                    widget.accent.withValues(alpha: 0.78),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: widget.accent.withValues(alpha: 0.26),
+                    blurRadius: _pulseExpanded ? 34 : 18,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                context.tr('TAP'),
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 20,
+          right: 20,
+          bottom: 22,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                _status,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: palette.primaryText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                context.tr(
+                  'Wibracje są aktywne na pulsie i przy dobrych trafieniach.',
+                ),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: palette.tertiaryText,
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -15575,80 +23701,100 @@ class _PulseSyncTrainerState extends State<PulseSyncTrainer> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = context.appPalette;
+    final isImmersive = widget.immersiveLayout;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: StatStrip(
-                label: 'Tempo',
-                value: '$_currentBpm BPM',
-                tint: widget.accent,
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        isImmersive ? 12 : 0,
+        12,
+        isImmersive ? 12 : 0,
+        12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: StatStrip(
+                  label: context.tr('Tempo'),
+                  value: '$_currentBpm BPM',
+                  tint: widget.accent,
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: StatStrip(
-                label: 'Czas',
-                value: '${_remainingSeconds}s',
-                tint: widget.accent,
+              const SizedBox(width: 10),
+              Expanded(
+                child: StatStrip(
+                  label: context.tr('Czas'),
+                  value: '${_remainingSeconds}s',
+                  tint: widget.accent,
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: StatStrip(
-                label: 'Punkty',
-                value: '$_points',
-                tint: widget.accent,
+              const SizedBox(width: 10),
+              Expanded(
+                child: StatStrip(
+                  label: context.tr('Punkty'),
+                  value: '$_points',
+                  tint: widget.accent,
+                ),
               ),
-            ),
+            ],
+          ),
+          SizedBox(height: isImmersive ? 12 : 18),
+          if (widget.showLevelSelector &&
+              !_running &&
+              !_isCountingDown &&
+              !_showFinishOnly) ...<Widget>[
+            _buildLevelSelector(),
+            const SizedBox(height: 18),
           ],
-        ),
-        const SizedBox(height: 18),
-        if (widget.showLevelSelector &&
-            !_running &&
-            !_isCountingDown &&
-            !_showFinishOnly) ...<Widget>[
-          _buildLevelSelector(),
-          const SizedBox(height: 18),
-        ],
-        GestureDetector(
-          onTap: _handleTap,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 26),
-            decoration: BoxDecoration(
-              color: palette.surfaceStrong,
-              borderRadius: BorderRadius.circular(26),
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              height: 300,
-              child: Center(
-                child: _isCountingDown
-                    ? _buildSessionBody(theme)
-                    : AnimatedSwitcher(
+          Expanded(
+            child: GestureDetector(
+              onTap: _handleTap,
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(
+                  horizontal: isImmersive ? 10 : 24,
+                  vertical: isImmersive ? 10 : 26,
+                ),
+                decoration: BoxDecoration(
+                  color: palette.surfaceStrong,
+                  borderRadius: BorderRadius.circular(isImmersive ? 18 : 26),
+                ),
+                child: isImmersive
+                    ? AnimatedSwitcher(
                         duration: const Duration(milliseconds: 220),
-                        child: _buildSessionBody(theme),
+                        child: _buildImmersiveSessionBody(theme),
+                      )
+                    : SizedBox(
+                        width: double.infinity,
+                        height: 300,
+                        child: Center(
+                          child: _isCountingDown
+                              ? _buildSessionBody(theme)
+                              : AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  child: _buildSessionBody(theme),
+                                ),
+                        ),
                       ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 18),
-        if (!_running && !_isCountingDown && !_showFinishOnly)
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
-              child: FilledButton(
-                onPressed: _handlePrimaryAction,
-                child: const Text('Start sesji'),
+          if (!_running && !_isCountingDown && !_showFinishOnly) ...<Widget>[
+            const SizedBox(height: 18),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
+                child: FilledButton(
+                  onPressed: _handlePrimaryAction,
+                  child: Text(context.tr('Start sesji')),
+                ),
               ),
             ),
-          ),
-      ],
+          ],
+        ],
+      ),
     );
   }
 }
@@ -15773,7 +23919,10 @@ class _FocusScanModeSelectorCardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const SectionHeader(eyebrow: 'Tryby', title: 'Tryby gry'),
+          SectionHeader(
+            eyebrow: context.tr('Tryby'),
+            title: context.tr('Tryby gry'),
+          ),
           const SizedBox(height: 18),
           Container(
             width: double.infinity,
@@ -15822,7 +23971,7 @@ class _FocusScanModeSelectorCardState
                           ),
                           child: Center(
                             child: Text(
-                              definition.label,
+                              context.tr(definition.label),
                               textAlign: TextAlign.center,
                               style: theme.textTheme.titleLarge?.copyWith(
                                 color: palette.primaryText,
@@ -15974,7 +24123,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
     if (value == null) {
       return '';
     }
-    return value == 0 ? 'START' : '$value';
+    return value == 0 ? context.tr('START') : '$value';
   }
 
   _FocusScanModeDefinition get _selectedModeDefinition =>
@@ -16423,7 +24572,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
       _buildExerciseSessionRoute<void>(
         builder: (BuildContext context) {
           return FullscreenTrainerPage(
-            title: 'Skan Koncentracji',
+            title: context.tr('Skan Koncentracji'),
             accent: widget.accent,
             expandBody: true,
             showHeader: false,
@@ -16463,7 +24612,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
       ) {
         final selected = _selectedMode == definition.mode;
         return ChoiceChip(
-          label: Text(definition.label),
+          label: Text(context.tr(definition.label)),
           selected: selected,
           onSelected: _running || _isCountingDown
               ? null
@@ -16511,7 +24660,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
         children: <Widget>[
           if (mode != FocusScanMode.basic) ...<Widget>[
             Text(
-              'TŁO',
+              context.tr('TŁO'),
               style: theme.textTheme.labelLarge?.copyWith(
                 color: palette.secondaryText,
                 fontWeight: FontWeight.w800,
@@ -16521,7 +24670,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
             const SizedBox(height: 14),
           ],
           Text(
-            stimulus.word.label,
+            context.tr(stimulus.word.label),
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineMedium?.copyWith(
               color: stimulus.ink.color,
@@ -16537,7 +24686,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
   Widget _buildOptionLabel(_FocusAnswerOption option, ThemeData theme) {
     final palette = context.appPalette;
     final label = Text(
-      option.label,
+      context.tr(option.label),
       textAlign: TextAlign.center,
       style: theme.textTheme.titleSmall?.copyWith(
         color: palette.primaryText,
@@ -16623,7 +24772,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Text(
-              'Koniec sesji',
+              context.tr('Koniec sesji'),
               style: theme.textTheme.headlineMedium?.copyWith(
                 color: palette.primaryText,
                 fontWeight: FontWeight.w900,
@@ -16632,7 +24781,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
             ),
             const SizedBox(height: 12),
             Text(
-              '${_modeDefinitionFor(_sessionMode).label} • $_points pkt',
+              '${context.tr(_modeDefinitionFor(_sessionMode).label)} • $_points ${context.tr('pkt')}',
               textAlign: TextAlign.center,
               style: theme.textTheme.titleLarge?.copyWith(
                 color: palette.secondaryText,
@@ -16645,14 +24794,14 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
     }
 
     if (_isCountingDown) {
-      final showCountdownHeading = _countdownLabel != 'START';
+      final showCountdownHeading = _countdownLabel != context.tr('START');
       return Column(
         key: const ValueKey<String>('focus-scan-countdown'),
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (showCountdownHeading) ...<Widget>[
             Text(
-              'START ZA',
+              context.tr('START ZA'),
               style: theme.textTheme.titleLarge?.copyWith(
                 color: palette.secondaryText,
                 fontWeight: FontWeight.w800,
@@ -16661,7 +24810,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
             ),
             const SizedBox(height: 14),
             Text(
-              _activeModeDefinition.title,
+              context.tr(_activeModeDefinition.title),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: widget.accent,
@@ -16676,7 +24825,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
             style: theme.textTheme.displaySmall?.copyWith(
               color: widget.accent,
               fontWeight: FontWeight.w900,
-              letterSpacing: _countdownLabel == 'START' ? 1.4 : 0.0,
+              letterSpacing: _countdownLabel == context.tr('START') ? 1.4 : 0.0,
             ),
           ),
         ],
@@ -16692,7 +24841,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Text(
-            round.question.prompt,
+            context.tr(round.question.prompt),
             textAlign: TextAlign.center,
             style: theme.textTheme.titleLarge?.copyWith(
               color: palette.primaryText,
@@ -16715,7 +24864,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         Text(
-          _selectedModeDefinition.title,
+          context.tr(_selectedModeDefinition.title),
           textAlign: TextAlign.center,
           style: theme.textTheme.titleLarge?.copyWith(
             color: palette.primaryText,
@@ -16730,7 +24879,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
         ),
         const SizedBox(height: 16),
         Text(
-          _selectedModeDefinition.summary,
+          context.tr(_selectedModeDefinition.summary),
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(
             color: palette.tertiaryText,
@@ -16759,9 +24908,58 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
         final bool compact = constraints.maxHeight < 680;
         final double sectionGap = compact ? 12 : 18;
         final double summaryPadding = compact ? 14 : 18;
-        final double sessionHeight = compact ? 230 : 320;
+        final double compactSessionHeight = compact ? 230 : 320;
         final bool showModeDetails =
             widget.showModeSelector && !_running && !_isCountingDown;
+        final bool showActionArea = _running || !_isCountingDown;
+        final Widget actionArea = _running
+            ? _buildAnswerButtons(theme)
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: 220,
+                    maxWidth: 280,
+                  ),
+                  child: FilledButton(
+                    onPressed: _handleStartAction,
+                    child: Text(
+                      _finished
+                          ? context.tr('Zagraj ponownie')
+                          : context.tr('Start sesji'),
+                    ),
+                  ),
+                ),
+              );
+
+        final Widget sessionCard = Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(compact ? 18 : 24),
+          decoration: BoxDecoration(
+            color: palette.surfaceStrong,
+            borderRadius: BorderRadius.circular(26),
+          ),
+          child: compact
+              ? SizedBox(
+                  width: double.infinity,
+                  height: compactSessionHeight,
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        child: _buildSessionBody(theme),
+                      ),
+                    ),
+                  ),
+                )
+              : Center(
+                  child: SingleChildScrollView(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: _buildSessionBody(theme),
+                    ),
+                  ),
+                ),
+        );
 
         final content = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -16770,7 +24968,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
               children: <Widget>[
                 Expanded(
                   child: StatStrip(
-                    label: 'Czas',
+                    label: context.tr('Czas'),
                     value: '${_remainingSeconds}s',
                     tint: widget.accent,
                   ),
@@ -16778,7 +24976,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: StatStrip(
-                    label: 'Punkty',
+                    label: context.tr('Punkty'),
                     value: '$_points',
                     tint: widget.accent,
                   ),
@@ -16800,7 +24998,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      '${_activeModeDefinition.label} • ${_activeModeDefinition.title}',
+                      '${context.tr(_activeModeDefinition.label)} • ${context.tr(_activeModeDefinition.title)}',
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: palette.primaryText,
                         fontWeight: FontWeight.w900,
@@ -16808,7 +25006,7 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      _activeModeDefinition.trainingGoal,
+                      context.tr(_activeModeDefinition.trainingGoal),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: palette.secondaryText,
                         fontWeight: FontWeight.w600,
@@ -16819,42 +25017,21 @@ class _FocusScanTrainerState extends State<FocusScanTrainer> {
               ),
               SizedBox(height: sectionGap),
             ],
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(compact ? 18 : 24),
-              decoration: BoxDecoration(
-                color: palette.surfaceStrong,
-                borderRadius: BorderRadius.circular(26),
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                height: sessionHeight,
-                child: Center(
-                  child: SingleChildScrollView(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      child: _buildSessionBody(theme),
-                    ),
-                  ),
+            if (compact) ...<Widget>[
+              sessionCard,
+              if (showActionArea) SizedBox(height: sectionGap),
+              if (showActionArea) actionArea,
+            ] else ...<Widget>[
+              Expanded(
+                child: Column(
+                  children: <Widget>[
+                    Expanded(child: sessionCard),
+                    if (showActionArea) SizedBox(height: sectionGap),
+                    if (showActionArea) actionArea,
+                  ],
                 ),
               ),
-            ),
-            SizedBox(height: sectionGap),
-            if (_running)
-              _buildAnswerButtons(theme)
-            else if (!_isCountingDown)
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    minWidth: 220,
-                    maxWidth: 280,
-                  ),
-                  child: FilledButton(
-                    onPressed: _handleStartAction,
-                    child: Text(_finished ? 'Zagraj ponownie' : 'Start sesji'),
-                  ),
-                ),
-              ),
+            ],
           ],
         );
 
@@ -17093,7 +25270,10 @@ class _FlowRunnerLevelSelectorCardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const SectionHeader(eyebrow: 'Poziomy', title: 'Poziomy gry'),
+          SectionHeader(
+            eyebrow: context.tr('Poziomy'),
+            title: context.tr('Poziomy gry'),
+          ),
           const SizedBox(height: 18),
           Container(
             width: double.infinity,
@@ -17155,7 +25335,7 @@ class _FlowRunnerLevelSelectorCardState
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
-                                  definition.label,
+                                  context.tr(definition.label),
                                   style: theme.textTheme.labelLarge?.copyWith(
                                     color: definition.tint,
                                     fontWeight: FontWeight.w900,
@@ -17165,7 +25345,7 @@ class _FlowRunnerLevelSelectorCardState
                               ),
                               const SizedBox(height: 14),
                               Text(
-                                definition.title,
+                                context.tr(definition.title),
                                 style: theme.textTheme.titleLarge?.copyWith(
                                   color: palette.primaryText,
                                   fontWeight: FontWeight.w900,
@@ -17173,7 +25353,7 @@ class _FlowRunnerLevelSelectorCardState
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                definition.summary,
+                                context.tr(definition.summary),
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: palette.secondaryText,
                                   height: 1.45,
@@ -17181,7 +25361,7 @@ class _FlowRunnerLevelSelectorCardState
                               ),
                               const Spacer(),
                               Text(
-                                definition.tempoLabel,
+                                context.tr(definition.tempoLabel),
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: palette.primaryText,
                                   fontWeight: FontWeight.w800,
@@ -17298,7 +25478,10 @@ class _SplitDecisionLevelSelectorCardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const SectionHeader(eyebrow: 'Poziomy', title: 'Poziomy gry'),
+          SectionHeader(
+            eyebrow: context.tr('Poziomy'),
+            title: context.tr('Poziomy gry'),
+          ),
           const SizedBox(height: 18),
           Container(
             width: double.infinity,
@@ -17347,7 +25530,9 @@ class _SplitDecisionLevelSelectorCardState
                           ),
                           child: Center(
                             child: Text(
-                              'Poziom ${level.level}',
+                              context.trf('Poziom {level}', <String, String>{
+                                'level': '${level.level}',
+                              }),
                               textAlign: TextAlign.center,
                               style: theme.textTheme.titleLarge?.copyWith(
                                 color: palette.primaryText,
@@ -17464,8 +25649,13 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
     super.initState();
     _levelIndex = _normalizedLevelIndex(widget.initialLevelIndex);
     _sessionLevelIndex = _levelIndex;
-    _progressionStatus =
-        'Aktualny poziom: ${_currentLevel.levelLabel} • ${_currentLevel.title}.';
+    _progressionStatus = _statusText(
+      'Aktualny poziom: {levelLabel} • {title}.',
+      <String, String>{
+        'levelLabel': _currentLevel.levelLabel,
+        'title': _currentLevel.title,
+      },
+    );
     _loadStoredSessionHistory();
     if (widget.autoStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -17489,13 +25679,26 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
     setState(() {
       _levelIndex = nextIndex;
       _sessionLevelIndex = nextIndex;
-      _progressionStatus =
-          'Aktualny poziom: ${_currentLevel.levelLabel} • ${_currentLevel.title}.';
+      _progressionStatus = _statusText(
+        'Aktualny poziom: {levelLabel} • {title}.',
+        <String, String>{
+          'levelLabel': _currentLevel.levelLabel,
+          'title': _currentLevel.title,
+        },
+      );
     });
   }
 
   int _normalizedLevelIndex(int index) {
     return max(0, min(index, _splitLevelDefinitions.length - 1));
+  }
+
+  String _statusText(String template, Map<String, String> params) {
+    var result = _localizedText(template, _activeUiLanguage);
+    params.forEach((String key, String value) {
+      result = result.replaceAll('{$key}', value);
+    });
+    return result;
   }
 
   bool get _isCountingDown => _countdownValue != null;
@@ -17505,7 +25708,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
     if (value == null) {
       return '$_sessionStartCountdownSeconds';
     }
-    return value == 0 ? 'START' : '$value';
+    return value == 0 ? context.tr('START') : '$value';
   }
 
   _SplitLevelDefinition get _currentLevel =>
@@ -17949,7 +26152,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
     setState(() {
       _activeRule = nextRule;
       _nextRuleChangeAt = DateTime.now().add(_currentRuleDuration);
-      _feedback = 'Nowa zasada: ${nextRule.label}';
+      _feedback = _statusText('Nowa zasada: {rule}', <String, String>{
+        'rule': context.tr(nextRule.label),
+      });
       _feedbackTint = widget.accent;
     });
 
@@ -18148,15 +26353,31 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
       _progressionStatus = switch (nextIndex.compareTo(
         _splitDecisionGlobalLevelIndex,
       )) {
-        1 => 'Awans na ${nextLevel.levelLabel} • ${nextLevel.title}.',
-        -1 =>
-          'Powrót do ${nextLevel.levelLabel} • ${nextLevel.title}, żeby ustabilizować formę.',
-        _ => 'Trzymasz ${nextLevel.levelLabel} • ${nextLevel.title}.',
+        1 => _statusText('Awans na {levelLabel} • {title}.', <String, String>{
+          'levelLabel': nextLevel.levelLabel,
+          'title': nextLevel.title,
+        }),
+        -1 => _statusText(
+          'Powrót do {levelLabel} • {title}, żeby ustabilizować formę.',
+          <String, String>{
+            'levelLabel': nextLevel.levelLabel,
+            'title': nextLevel.title,
+          },
+        ),
+        _ => _statusText('Trzymasz {levelLabel} • {title}.', <String, String>{
+          'levelLabel': nextLevel.levelLabel,
+          'title': nextLevel.title,
+        }),
       };
       if (nextIndex == _splitDecisionGlobalLevelIndex &&
           previousLevel.level != nextLevel.level) {
-        _progressionStatus =
-            'Aktualny poziom: ${nextLevel.levelLabel} • ${nextLevel.title}.';
+        _progressionStatus = _statusText(
+          'Aktualny poziom: {levelLabel} • {title}.',
+          <String, String>{
+            'levelLabel': nextLevel.levelLabel,
+            'title': nextLevel.title,
+          },
+        );
       }
     });
 
@@ -18242,9 +26463,13 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
       _buildExerciseSessionRoute<void>(
         builder: (BuildContext context) {
           return FullscreenTrainerPage(
-            title: 'Split Decision',
+            title: context.tr('Split Decision'),
             accent: widget.accent,
             expandBody: true,
+            showHeader: false,
+            wrapChildInSurfaceCard: false,
+            contentMaxWidth: null,
+            bodyPadding: EdgeInsets.zero,
             child: SplitDecisionTrainer(
               accent: widget.accent,
               autoStart: true,
@@ -18264,14 +26489,29 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
       return;
     }
 
+    if (!_running) {
+      final hasAccess = await _ensureSubscriptionAccess(
+        context,
+        exerciseTitle: context.tr('Split Decision'),
+      );
+      if (!hasAccess || !mounted) {
+        return;
+      }
+    }
+
     if (widget.fullscreenOnStart) {
       widget.onSessionStarted?.call();
       await _openFullscreenSession();
       if (mounted) {
         setState(() {
           _levelIndex = _splitDecisionGlobalLevelIndex;
-          _progressionStatus =
-              'Aktualny poziom: ${_currentLevel.levelLabel} • ${_currentLevel.title}.';
+          _progressionStatus = _statusText(
+            'Aktualny poziom: {levelLabel} • {title}.',
+            <String, String>{
+              'levelLabel': _currentLevel.levelLabel,
+              'title': _currentLevel.title,
+            },
+          );
         });
         await _loadStoredSessionHistory();
       }
@@ -18295,8 +26535,13 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
     setState(() {
       _levelIndex = index;
       _splitDecisionGlobalLevelIndex = index;
-      _progressionStatus =
-          'Wybrany poziom startowy: ${selectedLevel.levelLabel} • ${selectedLevel.title}.';
+      _progressionStatus = _statusText(
+        'Wybrany poziom startowy: {levelLabel} • {title}.',
+        <String, String>{
+          'levelLabel': selectedLevel.levelLabel,
+          'title': selectedLevel.title,
+        },
+      );
     });
 
     HapticFeedback.selectionClick();
@@ -18315,9 +26560,15 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
         final theme = Theme.of(dialogContext);
 
         return AlertDialog(
-          title: const Text('Usunąć zapisany wynik?'),
+          title: Text(context.tr('Usunąć zapisany wynik?')),
           content: Text(
-            'To usunie zapis poziomu ${record.level} z dnia ${_formatSessionDateLabel(record.dateKey)} wraz z pozostałymi rundami z tego dnia dla tego poziomu.',
+            context.trf(
+              'To usunie zapis poziomu {level} z dnia {date} wraz z pozostałymi rundami z tego dnia dla tego poziomu.',
+              <String, String>{
+                'level': '${record.level}',
+                'date': _formatSessionDateLabel(record.dateKey),
+              },
+            ),
             style: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
           ),
           actions: <Widget>[
@@ -18365,23 +26616,32 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
 
   String _buildTodayBestSummary() {
     if (!_historyLoaded) {
-      return 'Ładowanie zapisanych wyników...';
+      return context.tr('Ładowanie zapisanych wyników...');
     }
 
     final todayRecords = _todayBestRecords;
     if (todayRecords.isEmpty) {
-      return 'Dzisiaj nie ma jeszcze zapisanego rekordu.';
+      return context.tr('Dzisiaj nie ma jeszcze zapisanego rekordu.');
     }
 
     if (todayRecords.length == 1) {
       final todayBest = todayRecords.first;
-      return 'Dzisiaj: poziom ${todayBest.level} • skuteczność decyzji ${todayBest.accuracyPercent}% • ${_buildSessionActionSummary(todayBest)}';
+      return context.trf(
+        'Dzisiaj: poziom {level} • skuteczność decyzji {accuracy}% • {summary}',
+        <String, String>{
+          'level': '${todayBest.level}',
+          'accuracy': '${todayBest.accuracyPercent}',
+          'summary': _buildSessionActionSummary(todayBest),
+        },
+      );
     }
 
     final levelList = todayRecords
         .map((_SplitSessionRecord record) => '${record.level}')
         .join(', ');
-    return 'Dzisiaj zapisane poziomy: $levelList';
+    return context.trf('Dzisiaj zapisane poziomy: {levels}', <String, String>{
+      'levels': levelList,
+    });
   }
 
   Widget _buildDailyBestPanel(ThemeData theme) {
@@ -18416,7 +26676,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
-                              'Najlepsze wyniki dnia',
+                              context.tr('Najlepsze wyniki dnia'),
                               style: theme.textTheme.titleMedium?.copyWith(
                                 color: palette.primaryText,
                                 fontWeight: FontWeight.w800,
@@ -18457,7 +26717,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                       )
                     : dailyBestGroups.isEmpty
                     ? Text(
-                        'Po pierwszej zakończonej rundzie rekord dnia zapisze się tutaj. Wyniki są rozdzielane osobno dla każdej daty i poziomu.',
+                        context.tr(
+                          'Po pierwszej zakończonej rundzie rekord dnia zapisze się tutaj. Wyniki są rozdzielane osobno dla każdej daty i poziomu.',
+                        ),
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: palette.secondaryText,
                           height: 1.45,
@@ -18468,7 +26730,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                           Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: Text(
-                              'Przytrzymaj kafelek poziomu, żeby usunąć zapis z tego dnia.',
+                              context.tr(
+                                'Przytrzymaj kafelek poziomu, żeby usunąć zapis z tego dnia.',
+                              ),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: palette.tertiaryText,
                                 fontWeight: FontWeight.w700,
@@ -18542,7 +26806,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                     children: <Widget>[
                       Expanded(
                         child: Text(
-                          'Poziomy 1-5',
+                          context.tr('Poziomy 1-5'),
                           style: theme.textTheme.titleLarge?.copyWith(
                             color: palette.primaryText,
                             fontWeight: FontWeight.w800,
@@ -18552,12 +26816,14 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.close_rounded),
-                        tooltip: 'Zamknij',
+                        tooltip: context.tr('Zamknij'),
                       ),
                     ],
                   ),
                   Text(
-                    'Tutaj sprawdzisz, co zmienia się na kolejnych poziomach. Na ekranie startowym zostaje tylko wybór poziomu i przycisk startu.',
+                    context.tr(
+                      'Tutaj sprawdzisz, co zmienia się na kolejnych poziomach. Na ekranie startowym zostaje tylko wybór poziomu i przycisk startu.',
+                    ),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: const Color(0xFF4A5761),
                       height: 1.45,
@@ -18582,7 +26848,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            'Wybrany poziom jest poziomem startowym. Po rundzie gra dalej może podnieść albo obniżyć trudność na podstawie wyniku.',
+                            context.tr(
+                              'Wybrany poziom jest poziomem startowym. Po rundzie gra dalej może podnieść albo obniżyć trudność na podstawie wyniku.',
+                            ),
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: Colors.white.withValues(alpha: 0.84),
                               height: 1.45,
@@ -18636,7 +26904,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
-              'JAK ZAGRAĆ',
+              context.tr('JAK ZAGRAĆ'),
               style: theme.textTheme.labelLarge?.copyWith(
                 color: widget.accent,
                 fontWeight: FontWeight.w900,
@@ -18646,7 +26914,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
           ),
           SizedBox(height: blockGap),
           Text(
-            'Pełny ekran, 2 minuty i zmiana zasad co 12 sekund.',
+            context.tr('Pełny ekran, 2 minuty i zmiana zasad co 12 sekund.'),
             style: theme.textTheme.titleLarge?.copyWith(
               color: palette.primaryText,
               fontWeight: FontWeight.w800,
@@ -18654,7 +26922,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Tapnij start, a potem dotykaj ekranu tylko wtedy, gdy bodziec spełnia aktualną regułę.',
+            context.tr(
+              'Tapnij start, a potem dotykaj ekranu tylko wtedy, gdy bodziec spełnia aktualną regułę.',
+            ),
             style: theme.textTheme.bodyLarge?.copyWith(
               color: palette.secondaryText,
             ),
@@ -18693,7 +26963,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  'Przykładowe reguły w rundzie',
+                  context.tr('Przykładowe reguły w rundzie'),
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: Colors.white.withValues(alpha: 0.86),
                     fontWeight: FontWeight.w800,
@@ -18719,7 +26989,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                             ),
                           ),
                           child: Text(
-                            label,
+                            context.tr(label),
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
@@ -18737,12 +27007,14 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
             width: double.infinity,
             child: FilledButton(
               onPressed: _handleStartAction,
-              child: const Text('Start sesji'),
+              child: Text(context.tr('Start sesji')),
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Po starcie sesja otworzy się od razu na całym ekranie.',
+            context.tr(
+              'Po starcie sesja otworzy się od razu na całym ekranie.',
+            ),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: palette.tertiaryText,
             ),
@@ -18809,7 +27081,13 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Tempo: ${_currentLevel.tempoLabel} • Zmiana zasad: ${_currentLevel.ruleLabel}',
+            context.trf(
+              'Tempo: {tempo} • Zmiana zasad: {rules}',
+              <String, String>{
+                'tempo': _currentLevel.tempoLabel,
+                'rules': _currentLevel.ruleLabel,
+              },
+            ),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: palette.primaryText,
               fontWeight: FontWeight.w700,
@@ -18848,7 +27126,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Wybierz poziom startowy',
+                      context.tr('Wybierz poziom startowy'),
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: palette.primaryText,
                         fontWeight: FontWeight.w800,
@@ -18856,7 +27134,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Wybierz poziom 1-5. Pełny opis poziomów jest pod znakiem zapytania.',
+                      context.tr(
+                        'Wybierz poziom 1-5. Pełny opis poziomów jest pod znakiem zapytania.',
+                      ),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: palette.secondaryText,
                         height: 1.45,
@@ -18867,7 +27147,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
               ),
               const SizedBox(width: 12),
               Tooltip(
-                message: 'Opis poziomów',
+                message: context.tr('Opis poziomów'),
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -18896,7 +27176,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
           ),
           const SizedBox(height: 14),
           Text(
-            'Poziomy są ułożone jak osobne ścieżki wejścia. Wybierasz poziom startowy, a gra dalej sama może podnieść albo obniżyć trudność.',
+            context.tr(
+              'Poziomy są ułożone jak osobne ścieżki wejścia. Wybierasz poziom startowy, a gra dalej sama może podnieść albo obniżyć trudność.',
+            ),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: palette.secondaryText,
               height: 1.45,
@@ -18971,7 +27253,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
             border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
           ),
           child: Text(
-            'Koniec',
+            context.tr('Koniec'),
             style: theme.textTheme.headlineMedium?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w900,
@@ -18986,7 +27268,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Text(
-            'READY',
+            context.tr('READY'),
             style: theme.textTheme.headlineMedium?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w900,
@@ -18998,7 +27280,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                   !widget.fullscreenOnStart)) ...<Widget>[
             const SizedBox(height: 10),
             Text(
-              'Uruchom serię i reaguj bez zawahania.',
+              context.tr('Uruchom serię i reaguj bez zawahania.'),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: Colors.white.withValues(alpha: 0.76),
@@ -19034,7 +27316,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                 border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
               ),
               child: Text(
-                _activeRule.label,
+                context.tr(_activeRule.label),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: Colors.white,
@@ -19051,7 +27333,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
-                'Zm. za $_secondsToRuleChange s',
+                context.trf('Zm. za {seconds} s', <String, String>{
+                  'seconds': '$_secondsToRuleChange',
+                }),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: Colors.white.withValues(alpha: 0.74),
                   fontWeight: FontWeight.w700,
@@ -19087,7 +27371,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Text(
-                _activeRule.label,
+                context.tr(_activeRule.label),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineMedium?.copyWith(
                   color: Colors.white,
@@ -19096,7 +27380,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
               ),
               const SizedBox(height: 10),
               Text(
-                'Zm. za $_secondsToRuleChange s',
+                context.trf('Zm. za {seconds} s', <String, String>{
+                  'seconds': '$_secondsToRuleChange',
+                }),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: Colors.white.withValues(alpha: 0.76),
@@ -19133,7 +27419,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
         ),
         const SizedBox(height: 18),
         Text(
-          token.label,
+          context.tr(token.label),
           style: theme.textTheme.titleLarge?.copyWith(
             color: Colors.white,
             fontWeight: FontWeight.w800,
@@ -19153,7 +27439,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
         Icon(token.icon, size: 172, color: Colors.white),
         const SizedBox(height: 14),
         Text(
-          token.label,
+          context.tr(token.label),
           style: theme.textTheme.titleLarge?.copyWith(
             color: Colors.white,
             fontWeight: FontWeight.w800,
@@ -19180,7 +27466,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
         ),
         const SizedBox(height: 10),
         Text(
-          'LICZBA',
+          context.tr('LICZBA'),
           style: theme.textTheme.titleLarge?.copyWith(
             color: Colors.white,
             fontWeight: FontWeight.w800,
@@ -19238,7 +27524,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                   ? (compactHeight ? 380.0 : 450.0)
                   : (compactHeight ? 180.0 : 220.0)
             : (compactHeight ? 240.0 : 300.0);
-        final immersiveContentTopInset = compactHeight ? 160.0 : 184.0;
+        final immersiveContentTopInset = compactHeight ? 92.0 : 108.0;
 
         final ruleTag = Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -19250,8 +27536,10 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
             _isCountingDown
                 ? _countdownLabel
                 : _running
-                ? 'ZM. ZA $_secondsToRuleChange s'
-                : 'TAP',
+                ? context.trf('Zm. za {seconds} s', <String, String>{
+                    'seconds': '$_secondsToRuleChange',
+                  })
+                : context.tr('TAP'),
             style: theme.textTheme.labelLarge?.copyWith(
               color: widget.accent,
               fontWeight: FontWeight.w900,
@@ -19407,7 +27695,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                       child: FilledButton(
                         onPressed: _handleStartAction,
                         child: Text(
-                          _finished ? 'Zagraj ponownie' : 'Start sesji',
+                          _finished
+                              ? context.tr('Zagraj ponownie')
+                              : context.tr('Start sesji'),
                         ),
                       ),
                     ),
@@ -19429,7 +27719,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Aktualna zasada',
+                      context.tr('Aktualna zasada'),
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: const Color(0xFF4A5761),
                         fontWeight: FontWeight.w800,
@@ -19438,7 +27728,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      _activeRule.label,
+                      context.tr(_activeRule.label),
                       style: theme.textTheme.titleLarge?.copyWith(
                         color: const Color(0xFF16212B),
                         fontWeight: FontWeight.w800,
@@ -19455,7 +27745,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           Text(
-                            'Aktualna zasada',
+                            context.tr('Aktualna zasada'),
                             style: theme.textTheme.labelLarge?.copyWith(
                               color: const Color(0xFF4A5761),
                               fontWeight: FontWeight.w800,
@@ -19464,7 +27754,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            _activeRule.label,
+                            context.tr(_activeRule.label),
                             style: theme.textTheme.titleLarge?.copyWith(
                               color: const Color(0xFF16212B),
                               fontWeight: FontWeight.w800,
@@ -19480,12 +27770,16 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
         );
         final panel = Container(
           width: double.infinity,
-          clipBehavior: Clip.antiAlias,
-          padding: EdgeInsets.all(panelPadding),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF9F5EF),
-            borderRadius: BorderRadius.circular(26),
-          ),
+          clipBehavior: widget.immersiveLayout ? Clip.none : Clip.antiAlias,
+          padding: widget.immersiveLayout
+              ? EdgeInsets.zero
+              : EdgeInsets.all(panelPadding),
+          decoration: widget.immersiveLayout
+              ? null
+              : BoxDecoration(
+                  color: const Color(0xFFF9F5EF),
+                  borderRadius: BorderRadius.circular(26),
+                ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -19503,7 +27797,7 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                 if (showSupportInfo) ...<Widget>[
                   SizedBox(height: sectionGap),
                   Text(
-                    _feedback,
+                    context.tr(_feedback),
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: const Color(0xFF24303A),
                       fontWeight: FontWeight.w700,
@@ -19512,12 +27806,20 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                   const SizedBox(height: 8),
                   Text(
                     _running
-                        ? 'Tapnij ekran tylko wtedy, gdy bodziec spełnia aktualną regułę. Skuteczność liczy też poprawne odpuszczenia.'
+                        ? context.tr(
+                            'Tapnij ekran tylko wtedy, gdy bodziec spełnia aktualną regułę. Skuteczność liczy też poprawne odpuszczenia.',
+                          )
                         : _isCountingDown
-                        ? 'Za chwilę rusza runda. Poczekaj na pierwszy bodziec i dopiero wtedy reaguj.'
+                        ? context.tr(
+                            'Za chwilę rusza runda. Poczekaj na pierwszy bodziec i dopiero wtedy reaguj.',
+                          )
                         : _finished
-                        ? 'Wynik tej rundy został zapisany i zostanie po ponownym uruchomieniu aplikacji.'
-                        : 'Reguła zmienia się co 12 sekund, a na wyższych levelach bodźce lecą szybciej.',
+                        ? context.tr(
+                            'Wynik tej rundy został zapisany i zostanie po ponownym uruchomieniu aplikacji.',
+                          )
+                        : context.tr(
+                            'Reguła zmienia się co 12 sekund, a na wyższych levelach bodźce lecą szybciej.',
+                          ),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: const Color(0xFF63717C),
                     ),
@@ -19569,7 +27871,9 @@ class _SplitDecisionTrainerState extends State<SplitDecisionTrainer> {
                     child: FilledButton(
                       onPressed: _handleStartAction,
                       child: Text(
-                        _finished ? 'Zagraj ponownie' : 'Start sesji',
+                        _finished
+                            ? context.tr('Zagraj ponownie')
+                            : context.tr('Start sesji'),
                       ),
                     ),
                   ),
@@ -19668,7 +27972,10 @@ class _SplitLevelDefinition {
   final List<_SplitRuleKind> allowedRuleKinds;
   final Color color;
 
-  String get levelLabel => 'Level $level';
+  String get levelLabel => _localizedText(
+    'Poziom {level}',
+    _activeUiLanguage,
+  ).replaceAll('{level}', '$level');
 }
 
 const List<_SplitLevelDefinition>
@@ -19888,7 +28195,7 @@ class _SplitLaunchStep extends StatelessWidget {
         border: Border.all(color: const Color(0xFFD6DEE5)),
       ),
       child: Text(
-        label,
+        context.tr(label),
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
           color: const Color(0xFF24303A),
           fontWeight: FontWeight.w700,
@@ -20025,7 +28332,7 @@ class _SplitTopStat extends StatelessWidget {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                label.toUpperCase(),
+                context.tr(label).toUpperCase(),
                 maxLines: 1,
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: tint,
@@ -20096,45 +28403,174 @@ bool _isBetterSessionRecord(
   return candidate.completedAtIso.compareTo(current.completedAtIso) > 0;
 }
 
-const List<String> _flowMonthLabels = <String>[
-  'styczeń',
-  'luty',
-  'marzec',
-  'kwiecień',
-  'maj',
-  'czerwiec',
-  'lipiec',
-  'sierpień',
-  'wrzesień',
-  'październik',
-  'listopad',
-  'grudzień',
-];
+const Map<_AppLanguage, List<String>> _flowMonthLabelsByLanguage =
+    <_AppLanguage, List<String>>{
+      _AppLanguage.polish: <String>[
+        'styczeń',
+        'luty',
+        'marzec',
+        'kwiecień',
+        'maj',
+        'czerwiec',
+        'lipiec',
+        'sierpień',
+        'wrzesień',
+        'październik',
+        'listopad',
+        'grudzień',
+      ],
+      _AppLanguage.english: <String>[
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ],
+      _AppLanguage.german: <String>[
+        'Januar',
+        'Februar',
+        'Marz',
+        'April',
+        'Mai',
+        'Juni',
+        'Juli',
+        'August',
+        'September',
+        'Oktober',
+        'November',
+        'Dezember',
+      ],
+      _AppLanguage.ukrainian: <String>[
+        'січень',
+        'лютий',
+        'березень',
+        'квітень',
+        'травень',
+        'червень',
+        'липень',
+        'серпень',
+        'вересень',
+        'жовтень',
+        'листопад',
+        'грудень',
+      ],
+      _AppLanguage.russian: <String>[
+        'январь',
+        'февраль',
+        'март',
+        'апрель',
+        'май',
+        'июнь',
+        'июль',
+        'август',
+        'сентябрь',
+        'октябрь',
+        'ноябрь',
+        'декабрь',
+      ],
+    };
 
-const List<String> _flowMonthLabelsGenitive = <String>[
-  'stycznia',
-  'lutego',
-  'marca',
-  'kwietnia',
-  'maja',
-  'czerwca',
-  'lipca',
-  'sierpnia',
-  'września',
-  'października',
-  'listopada',
-  'grudnia',
-];
+const Map<_AppLanguage, List<String>> _flowMonthLabelsGenitiveByLanguage =
+    <_AppLanguage, List<String>>{
+      _AppLanguage.polish: <String>[
+        'stycznia',
+        'lutego',
+        'marca',
+        'kwietnia',
+        'maja',
+        'czerwca',
+        'lipca',
+        'sierpnia',
+        'września',
+        'października',
+        'listopada',
+        'grudnia',
+      ],
+      _AppLanguage.english: <String>[
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ],
+      _AppLanguage.german: <String>[
+        'Januar',
+        'Februar',
+        'Marz',
+        'April',
+        'Mai',
+        'Juni',
+        'Juli',
+        'August',
+        'September',
+        'Oktober',
+        'November',
+        'Dezember',
+      ],
+      _AppLanguage.ukrainian: <String>[
+        'січня',
+        'лютого',
+        'березня',
+        'квітня',
+        'травня',
+        'червня',
+        'липня',
+        'серпня',
+        'вересня',
+        'жовтня',
+        'листопада',
+        'грудня',
+      ],
+      _AppLanguage.russian: <String>[
+        'января',
+        'февраля',
+        'марта',
+        'апреля',
+        'мая',
+        'июня',
+        'июля',
+        'августа',
+        'сентября',
+        'октября',
+        'ноября',
+        'декабря',
+      ],
+    };
 
-const List<String> _flowWeekdayLabels = <String>[
-  'pon',
-  'wt',
-  'śr',
-  'czw',
-  'pt',
-  'sob',
-  'niedz',
-];
+const Map<_AppLanguage, List<String>>
+_flowWeekdayLabelsByLanguage = <_AppLanguage, List<String>>{
+  _AppLanguage.polish: <String>['pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'niedz'],
+  _AppLanguage.english: <String>[
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ],
+  _AppLanguage.german: <String>['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+  _AppLanguage.ukrainian: <String>['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'нд'],
+  _AppLanguage.russian: <String>['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'],
+};
+
+List<String> get _flowWeekdayLabels =>
+    _flowWeekdayLabelsByLanguage[_activeUiLanguage] ??
+    _flowWeekdayLabelsByLanguage[_AppLanguage.polish]!;
 
 List<DateTime?> _buildCalendarDays(DateTime visibleMonth) {
   final firstDay = DateTime(visibleMonth.year, visibleMonth.month, 1);
@@ -20181,7 +28617,10 @@ DateTime? _parseDateKey(String dateKey) {
 }
 
 String _formatFlowMonthYearLabel(DateTime value) {
-  return '${_flowMonthLabels[value.month - 1]} ${value.year}';
+  final labels =
+      _flowMonthLabelsByLanguage[_activeUiLanguage] ??
+      _flowMonthLabelsByLanguage[_AppLanguage.polish]!;
+  return '${labels[value.month - 1]} ${value.year}';
 }
 
 String _formatFlowLongDateLabel(String dateKey) {
@@ -20190,7 +28629,10 @@ String _formatFlowLongDateLabel(String dateKey) {
     return dateKey;
   }
 
-  return '${date.day} ${_flowMonthLabelsGenitive[date.month - 1]} ${date.year}';
+  final labels =
+      _flowMonthLabelsGenitiveByLanguage[_activeUiLanguage] ??
+      _flowMonthLabelsGenitiveByLanguage[_AppLanguage.polish]!;
+  return '${date.day} ${labels[date.month - 1]} ${date.year}';
 }
 
 String _formatSessionDateLabel(String dateKey) {
@@ -20554,7 +28996,9 @@ class _SplitLevelPickerButton extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Poziom ${level.level}',
+                      context.trf('Poziom {level}', <String, String>{
+                        'level': '${level.level}',
+                      }),
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: selected ? level.color : const Color(0xFF63717C),
                         fontWeight: FontWeight.w800,
@@ -20563,7 +29007,7 @@ class _SplitLevelPickerButton extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${level.polishName} • ${level.title}',
+                      '${context.tr(level.polishName)} • ${level.title}',
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: const Color(0xFF16212B),
                         fontWeight: FontWeight.w900,
@@ -20571,7 +29015,7 @@ class _SplitLevelPickerButton extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      level.goal,
+                      context.tr(level.goal),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: const Color(0xFF4A5761),
                         height: 1.4,
@@ -20579,7 +29023,13 @@ class _SplitLevelPickerButton extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Tempo ${level.tempoLabel} • Zasady ${level.ruleLabel}',
+                      context.trf(
+                        'Tempo {tempo} • Zasady {rules}',
+                        <String, String>{
+                          'tempo': level.tempoLabel,
+                          'rules': level.ruleLabel,
+                        },
+                      ),
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: selected ? level.color : const Color(0xFF63717C),
                         fontWeight: FontWeight.w800,
@@ -20876,7 +29326,9 @@ class _SplitLevelCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  'POZIOM ${level.level}',
+                  context.trf('Poziom {level}', <String, String>{
+                    'level': '${level.level}',
+                  }).toUpperCase(),
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: level.color,
                     fontWeight: FontWeight.w900,
@@ -20887,7 +29339,7 @@ class _SplitLevelCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '${level.polishName} • ${level.title}',
+                  '${context.tr(level.polishName)} • ${level.title}',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: palette.primaryText,
                     fontWeight: FontWeight.w800,
@@ -20898,7 +29350,7 @@ class _SplitLevelCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            level.goal,
+            context.tr(level.goal),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: palette.primaryText,
               fontWeight: FontWeight.w700,
@@ -21563,11 +30015,6 @@ int _speedReadPassageCountForCategory(SpeedReadCategory category) {
   return _speedReadThemesForCategory(category).length;
 }
 
-String _speedReadSeriesValue(SpeedReadCategory category) {
-  final categoryDefinition = _speedReadCategoryDefinition(category);
-  return '${_speedReadPassageCountForCategory(category)} ${categoryDefinition.seriesUnitLabel}';
-}
-
 List<_SpeedReadTheme> _speedReadThemesForCategory(SpeedReadCategory category) {
   return switch (category) {
     SpeedReadCategory.polish => _speedReadPolishThemes,
@@ -21676,7 +30123,10 @@ class _SpeedReadLevelSelectorCardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const SectionHeader(eyebrow: 'Poziomy', title: 'Poziomy gry'),
+          SectionHeader(
+            eyebrow: context.tr('Poziomy'),
+            title: context.tr('Poziomy gry'),
+          ),
           const SizedBox(height: 18),
           Container(
             width: double.infinity,
@@ -21725,7 +30175,7 @@ class _SpeedReadLevelSelectorCardState
                           ),
                           child: Center(
                             child: Text(
-                              level.label,
+                              context.tr(level.label),
                               textAlign: TextAlign.center,
                               style: theme.textTheme.titleLarge?.copyWith(
                                 color: palette.primaryText,
@@ -21792,13 +30242,18 @@ class SpeedReadTrainer extends StatefulWidget {
 class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
   late SpeedReadLevel _selectedLevel;
   late int _selectedWordsPerMinute;
-
-  static const SpeedReadCategory _fixedCategory = SpeedReadCategory.polish;
+  SpeedReadCategory get _activeCategory => switch (_activeUiLanguage) {
+    _AppLanguage.polish => SpeedReadCategory.polish,
+    _AppLanguage.german => SpeedReadCategory.german,
+    _AppLanguage.english ||
+    _AppLanguage.ukrainian ||
+    _AppLanguage.russian => SpeedReadCategory.english,
+  };
 
   @override
   void initState() {
     super.initState();
-    final initialLevels = _speedReadLevelsForCategory(_fixedCategory);
+    final initialLevels = _speedReadLevelsForCategory(_activeCategory);
     _selectedLevel =
         initialLevels.any(
           (_SpeedReadLevelDefinition level) =>
@@ -21810,7 +30265,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
   }
 
   List<_SpeedReadLevelDefinition> get _availableLevels =>
-      _speedReadLevelsForCategory(_fixedCategory);
+      _speedReadLevelsForCategory(_activeCategory);
 
   _SpeedReadLevelDefinition get _currentLevel => _availableLevels.firstWhere(
     (_SpeedReadLevelDefinition level) => level.level == _selectedLevel,
@@ -21850,19 +30305,41 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
     });
   }
 
+  String _wordsPerMinuteLabel(int value) {
+    return context.trf('{value} sł/min', <String, String>{'value': '$value'});
+  }
+
+  String _seriesValue() {
+    return context.trf('{count} tekstów', <String, String>{
+      'count': '${_speedReadPassageCountForCategory(_activeCategory)}',
+    });
+  }
+
   Future<void> _openSession() {
+    return _openSessionWithSubscriptionCheck();
+  }
+
+  Future<void> _openSessionWithSubscriptionCheck() async {
+    final hasAccess = await _ensureSubscriptionAccess(
+      context,
+      exerciseTitle: context.tr('Sprint Czytania'),
+    );
+    if (!hasAccess || !mounted) {
+      return;
+    }
+
     widget.onSessionStarted?.call();
 
     final session = SpeedReadSessionView(
       accent: widget.accent,
-      category: _fixedCategory,
+      category: _activeCategory,
       level: _selectedLevel,
       wordsPerMinute: _selectedWordsPerMinute,
       autoStart: true,
       autoExitOnFinish: true,
     );
 
-    const routeTitle = 'Sprint Czytania';
+    final routeTitle = context.tr('Sprint Czytania');
 
     final route = widget.fullscreenOnStart
         ? _buildExerciseSessionRoute<void>(
@@ -21871,6 +30348,10 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
                 title: routeTitle,
                 accent: widget.accent,
                 expandBody: true,
+                showHeader: false,
+                wrapChildInSurfaceCard: false,
+                contentMaxWidth: null,
+                bodyPadding: EdgeInsets.zero,
                 child: session,
               );
             },
@@ -21889,14 +30370,17 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
             },
           );
 
-    return Navigator.of(context).push<void>(route);
+    await Navigator.of(context).push<void>(route);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final rhythmLabel = '$_selectedWordsPerMinute sł/min • rytm 2, 1, START';
-    final seriesValue = _speedReadSeriesValue(_fixedCategory);
+    final rhythmLabel = context.trf(
+      '{speed} sł/min • rytm 2, 1, START',
+      <String, String>{'speed': '$_selectedWordsPerMinute'},
+    );
+    final seriesValue = _seriesValue();
 
     if (!widget.showLevelSelector) {
       return Column(
@@ -21906,7 +30390,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
             children: <Widget>[
               Expanded(
                 child: StatStrip(
-                  label: 'Zakres',
+                  label: context.tr('Zakres'),
                   value:
                       '$_speedReadMinWordsPerMinute-$_speedReadMaxWordsPerMinute',
                   tint: widget.accent,
@@ -21915,7 +30399,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
               const SizedBox(width: 10),
               Expanded(
                 child: StatStrip(
-                  label: 'Seria',
+                  label: context.tr('Seria'),
                   value: seriesValue,
                   tint: widget.accent,
                 ),
@@ -21937,7 +30421,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
                 Row(
                   children: <Widget>[
                     Text(
-                      'Tempo',
+                      context.tr('Tempo'),
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: const Color(0xFF16212B),
                         fontWeight: FontWeight.w800,
@@ -21945,7 +30429,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
                     ),
                     const Spacer(),
                     Text(
-                      '$_selectedWordsPerMinute sł/min',
+                      _wordsPerMinuteLabel(_selectedWordsPerMinute),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: widget.accent,
                         fontWeight: FontWeight.w800,
@@ -21974,7 +30458,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
                             _speedReadMinWordsPerMinute) ~/
                         _speedReadWordsPerMinuteStep,
                     value: _selectedWordsPerMinute.toDouble(),
-                    label: '$_selectedWordsPerMinute sł/min',
+                    label: _wordsPerMinuteLabel(_selectedWordsPerMinute),
                     onChanged: _setWordsPerMinute,
                   ),
                 ),
@@ -21989,7 +30473,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
                     ),
                     const Spacer(),
                     Text(
-                      '$_speedReadMaxWordsPerMinute sł/min',
+                      _wordsPerMinuteLabel(_speedReadMaxWordsPerMinute),
                       style: theme.textTheme.labelMedium?.copyWith(
                         color: const Color(0xFF7A8791),
                         fontWeight: FontWeight.w700,
@@ -22006,7 +30490,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
               constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
               child: FilledButton(
                 onPressed: _openSession,
-                child: const Text('Start sesji'),
+                child: Text(context.tr('Start sesji')),
               ),
             ),
           ),
@@ -22021,7 +30505,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
           children: <Widget>[
             Expanded(
               child: StatStrip(
-                label: 'Zakres',
+                label: context.tr('Zakres'),
                 value:
                     '$_speedReadMinWordsPerMinute-$_speedReadMaxWordsPerMinute',
                 tint: widget.accent,
@@ -22030,7 +30514,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
             const SizedBox(width: 10),
             Expanded(
               child: StatStrip(
-                label: 'Seria',
+                label: context.tr('Seria'),
                 value: seriesValue,
                 tint: widget.accent,
               ),
@@ -22058,7 +30542,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
               Row(
                 children: <Widget>[
                   Text(
-                    'Tempo',
+                    context.tr('Tempo'),
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: const Color(0xFF16212B),
                       fontWeight: FontWeight.w800,
@@ -22066,7 +30550,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
                   ),
                   const Spacer(),
                   Text(
-                    '$_selectedWordsPerMinute sł/min',
+                    _wordsPerMinuteLabel(_selectedWordsPerMinute),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: widget.accent,
                       fontWeight: FontWeight.w800,
@@ -22095,7 +30579,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
                           _speedReadMinWordsPerMinute) ~/
                       _speedReadWordsPerMinuteStep,
                   value: _selectedWordsPerMinute.toDouble(),
-                  label: '$_selectedWordsPerMinute sł/min',
+                  label: _wordsPerMinuteLabel(_selectedWordsPerMinute),
                   onChanged: _setWordsPerMinute,
                 ),
               ),
@@ -22110,7 +30594,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
                   ),
                   const Spacer(),
                   Text(
-                    '$_speedReadMaxWordsPerMinute sł/min',
+                    _wordsPerMinuteLabel(_speedReadMaxWordsPerMinute),
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: const Color(0xFF7A8791),
                       fontWeight: FontWeight.w700,
@@ -22132,7 +30616,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
           child: Column(
             children: <Widget>[
               Text(
-                _currentLevel.label,
+                context.tr(_currentLevel.label),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: const Color(0xFF16212B),
@@ -22166,7 +30650,7 @@ class _SpeedReadTrainerState extends State<SpeedReadTrainer> {
             constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
             child: FilledButton(
               onPressed: _openSession,
-              child: const Text('Start sesji'),
+              child: Text(context.tr('Start sesji')),
             ),
           ),
         ),
@@ -22259,7 +30743,7 @@ class _SpeedReadSessionViewState extends State<SpeedReadSessionView> {
     if (value == null) {
       return '';
     }
-    return value == 0 ? 'START' : '$value';
+    return value == 0 ? context.tr('START') : '$value';
   }
 
   double get _progress {
@@ -22469,7 +30953,7 @@ class _SpeedReadSessionViewState extends State<SpeedReadSessionView> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: <Widget>[
                           Text(
-                            'Koniec serii',
+                            context.tr('Koniec serii'),
                             textAlign: TextAlign.center,
                             style: theme.textTheme.headlineMedium?.copyWith(
                               color: const Color(0xFF16212B),
@@ -22478,7 +30962,18 @@ class _SpeedReadSessionViewState extends State<SpeedReadSessionView> {
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            'Masz za sobą ${_speedReadSeriesValue(widget.category)}. Zatrzymaj na chwilę sens i rytm, które zostały w głowie.',
+                            context.trf(
+                              'Masz za sobą {series}. Zatrzymaj na chwilę sens i rytm, które zostały w głowie.',
+                              <String, String>{
+                                'series': context.trf('{count} tekstów', <
+                                  String,
+                                  String
+                                >{
+                                  'count':
+                                      '${_speedReadPassageCountForCategory(widget.category)}',
+                                }),
+                              },
+                            ),
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyLarge?.copyWith(
                               color: const Color(0xFF4F5C67),
@@ -22506,7 +31001,10 @@ class _SpeedReadSessionViewState extends State<SpeedReadSessionView> {
                           style: theme.textTheme.displayLarge?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: _countdownLabel == 'START' ? 1.2 : 0,
+                            letterSpacing:
+                                _countdownLabel == context.tr('START')
+                                ? 1.2
+                                : 0,
                           ),
                         ),
                       ),
@@ -22671,9 +31169,20 @@ enum _PeripheralCueSlot {
   final Alignment alignment;
 }
 
-enum _FlowRunnerEntityKind { obstacle, bonus }
+enum _FlowRunnerEntityKind { obstacle, meteor, bonus, life }
 
-enum _FlowRunnerPlayerSkin { orb, star, triangle, cylinder, waterBottle }
+enum _FlowRunnerPlayerSkin {
+  orb,
+  star,
+  triangle,
+  cylinder,
+  pinkDot,
+  waterBottle,
+  f16,
+  helicopter,
+  rocket,
+  ufo,
+}
 
 extension _FlowRunnerPlayerSkinPresentation on _FlowRunnerPlayerSkin {
   String get id => name;
@@ -22683,31 +31192,217 @@ extension _FlowRunnerPlayerSkinPresentation on _FlowRunnerPlayerSkin {
     _FlowRunnerPlayerSkin.star => 'Gwiazda',
     _FlowRunnerPlayerSkin.triangle => 'Trójkąt',
     _FlowRunnerPlayerSkin.cylinder => 'Walec',
+    _FlowRunnerPlayerSkin.pinkDot => 'Różowa kropka',
     _FlowRunnerPlayerSkin.waterBottle => 'Browar',
+    _FlowRunnerPlayerSkin.f16 => 'F16',
+    _FlowRunnerPlayerSkin.helicopter => 'Helikopter',
+    _FlowRunnerPlayerSkin.rocket => 'Rakieta',
+    _FlowRunnerPlayerSkin.ufo => 'UFO',
   };
 
   int get cost => switch (this) {
     _FlowRunnerPlayerSkin.orb => 0,
-    _FlowRunnerPlayerSkin.star => 50,
+    _FlowRunnerPlayerSkin.star => 135,
     _FlowRunnerPlayerSkin.triangle => 25,
     _FlowRunnerPlayerSkin.cylinder => 100,
-    _FlowRunnerPlayerSkin.waterBottle => 5,
+    _FlowRunnerPlayerSkin.pinkDot => 236,
+    _FlowRunnerPlayerSkin.waterBottle => 77,
+    _FlowRunnerPlayerSkin.f16 => 0,
+    _FlowRunnerPlayerSkin.helicopter => 80,
+    _FlowRunnerPlayerSkin.rocket => 25,
+    _FlowRunnerPlayerSkin.ufo => 44,
+  };
+
+  String? get imageAssetPath => switch (this) {
+    _FlowRunnerPlayerSkin.helicopter =>
+      'assets/skins/flow_runner/helicopter.jpg',
+    _FlowRunnerPlayerSkin.rocket => 'assets/skins/flow_runner/rocket_real.png',
+    _ => null,
   };
 }
 
 const List<_FlowRunnerPlayerSkin> _flowRunnerUnlockableSkins =
     <_FlowRunnerPlayerSkin>[
-      _FlowRunnerPlayerSkin.orb,
+      _FlowRunnerPlayerSkin.f16,
+      _FlowRunnerPlayerSkin.rocket,
+      _FlowRunnerPlayerSkin.ufo,
       _FlowRunnerPlayerSkin.waterBottle,
-      _FlowRunnerPlayerSkin.triangle,
       _FlowRunnerPlayerSkin.star,
-      _FlowRunnerPlayerSkin.cylinder,
+      _FlowRunnerPlayerSkin.pinkDot,
     ];
+
+const _FlowRunnerPlayerSkin _flowRunnerDefaultSkin = _FlowRunnerPlayerSkin.f16;
+
+bool _isFlowRunnerSkinAvailable(_FlowRunnerPlayerSkin skin) {
+  return _flowRunnerUnlockableSkins.contains(skin);
+}
 
 _FlowRunnerPlayerSkin _flowRunnerPlayerSkinFromId(String? id) {
   return _FlowRunnerPlayerSkin.values.firstWhere(
     (_FlowRunnerPlayerSkin skin) => skin.id == id,
-    orElse: () => _FlowRunnerPlayerSkin.orb,
+    orElse: () => _flowRunnerDefaultSkin,
+  );
+}
+
+enum _FlowRunnerArenaMap {
+  classic,
+  neonTunnel,
+  canyon,
+  icePeaks,
+  towerCrane,
+  volcanoCore,
+  basketArena,
+}
+
+extension _FlowRunnerArenaMapPresentation on _FlowRunnerArenaMap {
+  String get id => name;
+
+  String get label => switch (this) {
+    _FlowRunnerArenaMap.classic => 'Klasyczna',
+    _FlowRunnerArenaMap.neonTunnel => 'Kosmiczny tunel',
+    _FlowRunnerArenaMap.canyon => 'Kanion',
+    _FlowRunnerArenaMap.icePeaks => 'Lodowe szczyty',
+    _FlowRunnerArenaMap.towerCrane => 'Żuraw wieżowy',
+    _FlowRunnerArenaMap.volcanoCore => 'Wulkaniczny rdzeń',
+    _FlowRunnerArenaMap.basketArena => 'Koszykarska arena',
+  };
+
+  String get summary => switch (this) {
+    _FlowRunnerArenaMap.classic => 'Czytelna arena treningowa',
+    _FlowRunnerArenaMap.neonTunnel => 'Mocny neon i głęboki kontrast',
+    _FlowRunnerArenaMap.canyon => 'Ciepłe światło i piaskowy klimat',
+    _FlowRunnerArenaMap.icePeaks => 'Wysokie góry i chłodny, matowy klimat',
+    _FlowRunnerArenaMap.towerCrane => 'Plac budowy, żuraw i surowe przeszkody',
+    _FlowRunnerArenaMap.volcanoCore =>
+      'Gorący krater, lawa i kamienne zagrożenia',
+    _FlowRunnerArenaMap.basketArena =>
+      'Parkiet, obręcze i dynamiczne przeszkody z kosza',
+  };
+
+  int get cost => switch (this) {
+    _FlowRunnerArenaMap.classic => 0,
+    _FlowRunnerArenaMap.neonTunnel => 200,
+    _FlowRunnerArenaMap.canyon => 200,
+    _FlowRunnerArenaMap.icePeaks => 0,
+    _FlowRunnerArenaMap.towerCrane => 100,
+    _FlowRunnerArenaMap.volcanoCore => 160,
+    _FlowRunnerArenaMap.basketArena => 140,
+  };
+
+  List<Color> get backgroundColors => switch (this) {
+    _FlowRunnerArenaMap.classic => const <Color>[
+      Color(0xFF081722),
+      Color(0xFF0D2430),
+      Color(0xFF17384B),
+    ],
+    _FlowRunnerArenaMap.neonTunnel => const <Color>[
+      Color(0xFF05050D),
+      Color(0xFF191336),
+      Color(0xFF0E3157),
+    ],
+    _FlowRunnerArenaMap.canyon => const <Color>[
+      Color(0xFF2A140A),
+      Color(0xFF5C2917),
+      Color(0xFF9C4D2A),
+    ],
+    _FlowRunnerArenaMap.icePeaks => const <Color>[
+      Color(0xFF091622),
+      Color(0xFF1B3044),
+      Color(0xFF375A78),
+    ],
+    _FlowRunnerArenaMap.towerCrane => const <Color>[
+      Color(0xFF1A1918),
+      Color(0xFF3A3530),
+      Color(0xFF5A5248),
+    ],
+    _FlowRunnerArenaMap.volcanoCore => const <Color>[
+      Color(0xFF1D0904),
+      Color(0xFF4E1A0E),
+      Color(0xFF8F2D13),
+    ],
+    _FlowRunnerArenaMap.basketArena => const <Color>[
+      Color(0xFF1A1208),
+      Color(0xFF5A3A1A),
+      Color(0xFFB3712B),
+    ],
+  };
+
+  Color get borderColor => switch (this) {
+    _FlowRunnerArenaMap.classic => const Color(0xFF2E9E89),
+    _FlowRunnerArenaMap.neonTunnel => const Color(0xFF6B66FF),
+    _FlowRunnerArenaMap.canyon => const Color(0xFFFF9E47),
+    _FlowRunnerArenaMap.icePeaks => const Color(0xFF9ED5FF),
+    _FlowRunnerArenaMap.towerCrane => const Color(0xFFFFC145),
+    _FlowRunnerArenaMap.volcanoCore => const Color(0xFFFF6A2A),
+    _FlowRunnerArenaMap.basketArena => const Color(0xFFFF9B2F),
+  };
+
+  Color get laneColor => switch (this) {
+    _FlowRunnerArenaMap.classic => Colors.white.withValues(alpha: 0.14),
+    _FlowRunnerArenaMap.neonTunnel => const Color(
+      0xFF90A0FF,
+    ).withValues(alpha: 0.28),
+    _FlowRunnerArenaMap.canyon => const Color(
+      0xFFFFCE91,
+    ).withValues(alpha: 0.24),
+    _FlowRunnerArenaMap.icePeaks => const Color(
+      0xFFD1EAFF,
+    ).withValues(alpha: 0.2),
+    _FlowRunnerArenaMap.towerCrane => const Color(
+      0xFFFFDFA4,
+    ).withValues(alpha: 0.17),
+    _FlowRunnerArenaMap.volcanoCore => const Color(
+      0xFFFFC57B,
+    ).withValues(alpha: 0.2),
+    _FlowRunnerArenaMap.basketArena => const Color(
+      0xFFFFD9A8,
+    ).withValues(alpha: 0.2),
+  };
+
+  Color get stripeColor => switch (this) {
+    _FlowRunnerArenaMap.classic => const Color(
+      0xFF2E9E89,
+    ).withValues(alpha: 0.3),
+    _FlowRunnerArenaMap.neonTunnel => const Color(
+      0xFF6B66FF,
+    ).withValues(alpha: 0.36),
+    _FlowRunnerArenaMap.canyon => const Color(
+      0xFFFF9E47,
+    ).withValues(alpha: 0.34),
+    _FlowRunnerArenaMap.icePeaks => const Color(
+      0xFFB9E6FF,
+    ).withValues(alpha: 0.34),
+    _FlowRunnerArenaMap.towerCrane => const Color(
+      0xFFFFC145,
+    ).withValues(alpha: 0.28),
+    _FlowRunnerArenaMap.volcanoCore => const Color(
+      0xFFFF6A2A,
+    ).withValues(alpha: 0.36),
+    _FlowRunnerArenaMap.basketArena => const Color(
+      0xFFFF8A1E,
+    ).withValues(alpha: 0.34),
+  };
+}
+
+const List<_FlowRunnerArenaMap> _flowRunnerAvailableMaps =
+    <_FlowRunnerArenaMap>[
+      _FlowRunnerArenaMap.icePeaks,
+      _FlowRunnerArenaMap.towerCrane,
+      _FlowRunnerArenaMap.volcanoCore,
+      _FlowRunnerArenaMap.basketArena,
+      _FlowRunnerArenaMap.neonTunnel,
+    ];
+
+const _FlowRunnerArenaMap _flowRunnerDefaultMap = _FlowRunnerArenaMap.icePeaks;
+
+bool _isFlowRunnerMapAvailable(_FlowRunnerArenaMap map) {
+  return _flowRunnerAvailableMaps.contains(map);
+}
+
+_FlowRunnerArenaMap _flowRunnerArenaMapFromId(String? id) {
+  return _FlowRunnerArenaMap.values.firstWhere(
+    (_FlowRunnerArenaMap map) => map.id == id,
+    orElse: () => _flowRunnerDefaultMap,
   );
 }
 
@@ -22719,6 +31414,16 @@ class _FlowRunnerEntity {
     required this.y,
     required this.speedFactor,
     this.obstacleColor,
+    this.visualScale = 1.0,
+    this.visualRotation = 0.0,
+    this.isIcicle = false,
+    this.isScaffold = false,
+    this.isRebar = false,
+    this.isLavaBomb = false,
+    this.isLavaSpire = false,
+    this.isBasketball = false,
+    this.isHoop = false,
+    this.glowStrength = 0.25,
     this.scored = false,
   });
 
@@ -22728,6 +31433,16 @@ class _FlowRunnerEntity {
   final double y;
   final double speedFactor;
   final Color? obstacleColor;
+  final double visualScale;
+  final double visualRotation;
+  final bool isIcicle;
+  final bool isScaffold;
+  final bool isRebar;
+  final bool isLavaBomb;
+  final bool isLavaSpire;
+  final bool isBasketball;
+  final bool isHoop;
+  final double glowStrength;
   final bool scored;
 
   _FlowRunnerEntity copyWith({
@@ -22737,6 +31452,16 @@ class _FlowRunnerEntity {
     double? y,
     double? speedFactor,
     Color? obstacleColor,
+    double? visualScale,
+    double? visualRotation,
+    bool? isIcicle,
+    bool? isScaffold,
+    bool? isRebar,
+    bool? isLavaBomb,
+    bool? isLavaSpire,
+    bool? isBasketball,
+    bool? isHoop,
+    double? glowStrength,
     bool? scored,
   }) {
     return _FlowRunnerEntity(
@@ -22746,6 +31471,16 @@ class _FlowRunnerEntity {
       y: y ?? this.y,
       speedFactor: speedFactor ?? this.speedFactor,
       obstacleColor: obstacleColor ?? this.obstacleColor,
+      visualScale: visualScale ?? this.visualScale,
+      visualRotation: visualRotation ?? this.visualRotation,
+      isIcicle: isIcicle ?? this.isIcicle,
+      isScaffold: isScaffold ?? this.isScaffold,
+      isRebar: isRebar ?? this.isRebar,
+      isLavaBomb: isLavaBomb ?? this.isLavaBomb,
+      isLavaSpire: isLavaSpire ?? this.isLavaSpire,
+      isBasketball: isBasketball ?? this.isBasketball,
+      isHoop: isHoop ?? this.isHoop,
+      glowStrength: glowStrength ?? this.glowStrength,
       scored: scored ?? this.scored,
     );
   }
@@ -22759,6 +31494,18 @@ class _FlowRunnerSessionResult {
 
   final bool completed;
   final int diamondsCollected;
+}
+
+class _FlowRunnerMapPickerResult {
+  const _FlowRunnerMapPickerResult({
+    required this.selectedMap,
+    required this.diamondBalance,
+    required this.unlockedMaps,
+  });
+
+  final _FlowRunnerArenaMap selectedMap;
+  final int diamondBalance;
+  final Set<_FlowRunnerArenaMap> unlockedMaps;
 }
 
 const double _flowRunnerPlayerTrackMinX = 0.18;
@@ -22798,12 +31545,18 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
       'flow_runner_diamond_balance_v1';
   static const String _ownedSkinsPrefsKey = 'flow_runner_owned_skins_v1';
   static const String _selectedSkinPrefsKey = 'flow_runner_selected_skin_v1';
+  static const String _ownedMapsPrefsKey = 'flow_runner_owned_maps_v1';
+  static const String _selectedMapPrefsKey = 'flow_runner_selected_map_v1';
+  static const String _diamondsResetAppliedPrefsKey =
+      'flow_runner_diamonds_reset_applied_v2';
 
   bool _finished = false;
   int _totalDiamonds = 0;
   int _diamondBalance = 0;
   Set<_FlowRunnerPlayerSkin> _ownedSkins = <_FlowRunnerPlayerSkin>{};
-  _FlowRunnerPlayerSkin _selectedSkin = _FlowRunnerPlayerSkin.orb;
+  _FlowRunnerPlayerSkin _selectedSkin = _flowRunnerDefaultSkin;
+  Set<_FlowRunnerArenaMap> _ownedMaps = <_FlowRunnerArenaMap>{};
+  _FlowRunnerArenaMap _selectedMap = _flowRunnerDefaultMap;
 
   _FlowRunnerLevelDefinition get _currentLevel =>
       _flowRunnerLevelDefinitions.first;
@@ -22816,26 +31569,56 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
 
   Future<void> _loadCustomizationState() async {
     final prefs = await SharedPreferences.getInstance();
-    final int storedTotalDiamonds = prefs.getInt(_totalDiamondsPrefsKey) ?? 0;
-    final int storedDiamondBalance =
+    int storedTotalDiamonds = prefs.getInt(_totalDiamondsPrefsKey) ?? 0;
+    int storedDiamondBalance =
         prefs.getInt(_diamondBalancePrefsKey) ?? storedTotalDiamonds;
+    final bool diamondsResetApplied =
+        prefs.getBool(_diamondsResetAppliedPrefsKey) ?? false;
+    if (!diamondsResetApplied) {
+      storedTotalDiamonds = 0;
+      storedDiamondBalance = 0;
+      await prefs.setInt(_totalDiamondsPrefsKey, 0);
+      await prefs.setInt(_diamondBalancePrefsKey, 0);
+      await prefs.setBool(_diamondsResetAppliedPrefsKey, true);
+    }
     final Set<_FlowRunnerPlayerSkin> ownedSkins =
         prefs
             .getStringList(_ownedSkinsPrefsKey)
             ?.map(_flowRunnerPlayerSkinFromId)
             .where(
-              (_FlowRunnerPlayerSkin skin) => skin != _FlowRunnerPlayerSkin.orb,
+              (_FlowRunnerPlayerSkin skin) =>
+                  _isFlowRunnerSkinAvailable(skin) &&
+                  skin != _flowRunnerDefaultSkin,
             )
             .toSet() ??
         <_FlowRunnerPlayerSkin>{};
     final _FlowRunnerPlayerSkin nextSelectedSkin = _flowRunnerPlayerSkinFromId(
       prefs.getString(_selectedSkinPrefsKey),
     );
+    final Set<_FlowRunnerArenaMap> ownedMaps =
+        prefs
+            .getStringList(_ownedMapsPrefsKey)
+            ?.map(_flowRunnerArenaMapFromId)
+            .where(
+              (_FlowRunnerArenaMap map) =>
+                  _isFlowRunnerMapAvailable(map) &&
+                  map != _flowRunnerDefaultMap,
+            )
+            .toSet() ??
+        <_FlowRunnerArenaMap>{};
+    final _FlowRunnerArenaMap nextSelectedMap = _flowRunnerArenaMapFromId(
+      prefs.getString(_selectedMapPrefsKey),
+    );
     final _FlowRunnerPlayerSkin resolvedSelectedSkin =
-        nextSelectedSkin == _FlowRunnerPlayerSkin.orb ||
+        nextSelectedSkin == _flowRunnerDefaultSkin ||
             ownedSkins.contains(nextSelectedSkin)
         ? nextSelectedSkin
-        : _FlowRunnerPlayerSkin.orb;
+        : _flowRunnerDefaultSkin;
+    final _FlowRunnerArenaMap resolvedSelectedMap =
+        nextSelectedMap == _flowRunnerDefaultMap ||
+            ownedMaps.contains(nextSelectedMap)
+        ? nextSelectedMap
+        : _flowRunnerDefaultMap;
 
     if (!mounted) {
       return;
@@ -22846,6 +31629,8 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
       _diamondBalance = storedDiamondBalance;
       _ownedSkins = ownedSkins;
       _selectedSkin = resolvedSelectedSkin;
+      _ownedMaps = ownedMaps;
+      _selectedMap = resolvedSelectedMap;
     });
   }
 
@@ -22881,7 +31666,10 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
   }
 
   Future<void> _selectSkin(_FlowRunnerPlayerSkin skin) async {
-    if (skin != _FlowRunnerPlayerSkin.orb && !_ownedSkins.contains(skin)) {
+    if (!_isFlowRunnerSkinAvailable(skin)) {
+      return;
+    }
+    if (skin != _flowRunnerDefaultSkin && !_ownedSkins.contains(skin)) {
       return;
     }
 
@@ -22899,15 +31687,77 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
     HapticFeedback.selectionClick();
   }
 
+  Future<void> _buyMap(_FlowRunnerArenaMap map) async {
+    if (_ownedMaps.contains(map) || _diamondBalance < map.cost) {
+      return;
+    }
+
+    final Set<_FlowRunnerArenaMap> nextOwnedMaps = <_FlowRunnerArenaMap>{
+      ..._ownedMaps,
+      map,
+    };
+    final int nextDiamondBalance = _diamondBalance - map.cost;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_diamondBalancePrefsKey, nextDiamondBalance);
+    await prefs.setStringList(
+      _ownedMapsPrefsKey,
+      nextOwnedMaps
+          .map((_FlowRunnerArenaMap item) => item.id)
+          .toList(growable: false),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _diamondBalance = nextDiamondBalance;
+      _ownedMaps = nextOwnedMaps;
+    });
+
+    HapticFeedback.mediumImpact();
+  }
+
+  Future<void> _selectMap(_FlowRunnerArenaMap map) async {
+    if (!_isFlowRunnerMapAvailable(map)) {
+      return;
+    }
+    if (map != _flowRunnerDefaultMap && !_ownedMaps.contains(map)) {
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_selectedMapPrefsKey, map.id);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _selectedMap = map;
+    });
+
+    HapticFeedback.selectionClick();
+  }
+
   Future<void> _start() async {
+    final hasAccess = await _ensureSubscriptionAccess(
+      context,
+      exerciseTitle: context.tr('Flow Runner'),
+    );
+    if (!hasAccess || !mounted) {
+      return;
+    }
+
     widget.onSessionStarted?.call();
 
     final result = await Navigator.of(context).push<_FlowRunnerSessionResult>(
       _buildExerciseSessionRoute<_FlowRunnerSessionResult>(
         builder: (BuildContext context) {
-          return FlowRunnerSessionPage(
+          return _FlowRunnerSessionPage(
             accent: widget.accent,
             selectedSkin: _selectedSkin,
+            selectedMap: _selectedMap,
           );
         },
       ),
@@ -22943,7 +31793,7 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
   Widget _buildSkinStoreCard(_FlowRunnerPlayerSkin skin) {
     final theme = Theme.of(context);
     final palette = context.appPalette;
-    final bool isDefaultFreeSkin = skin == _FlowRunnerPlayerSkin.orb;
+    final bool isDefaultFreeSkin = skin == _flowRunnerDefaultSkin;
     final bool isOwned = isDefaultFreeSkin || _ownedSkins.contains(skin);
     final bool isSelected = _selectedSkin == skin;
     final bool canAfford = isDefaultFreeSkin || _diamondBalance >= skin.cost;
@@ -22958,7 +31808,7 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
         ? 'Aktywna'
         : isOwned
         ? 'Użyj'
-        : 'Kup';
+        : context.tr('Kup');
     final String helperLabel = isSelected
         ? 'Aktywna animacja w grze'
         : isDefaultFreeSkin
@@ -22969,18 +31819,24 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
+      width: 278,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: palette.surfaceStrong,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isSelected
-              ? widget.accent.withValues(alpha: 0.58)
-              : isOwned
-              ? const Color(0xFF2FD675).withValues(alpha: 0.42)
-              : palette.outlinedButtonBorder.withValues(alpha: 0.18),
-          width: isSelected ? 1.8 : 1.2,
-        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color:
+                (isSelected
+                        ? widget.accent
+                        : isOwned
+                        ? const Color(0xFF2FD675)
+                        : palette.outlinedButtonBorder)
+                    .withValues(alpha: isSelected ? 0.28 : 0.12),
+            blurRadius: isSelected ? 18 : 10,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
         children: <Widget>[
@@ -23002,7 +31858,7 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  skin.label,
+                  context.tr(skin.label),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleSmall?.copyWith(
@@ -23019,7 +31875,9 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        '${skin.cost} diamentów',
+                        context.trf('{count} diamentów', <String, String>{
+                          'count': '${skin.cost}',
+                        }),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -23033,7 +31891,9 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  !isOwned && !canAfford ? 'Za mało diamentów' : helperLabel,
+                  context.tr(
+                    !isOwned && !canAfford ? 'Za mało diamentów' : helperLabel,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -23067,7 +31927,7 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
                       ),
                     ),
                     child: Text(
-                      buttonLabel,
+                      context.tr(buttonLabel),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.labelLarge?.copyWith(
@@ -23086,7 +31946,210 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
                       ),
                     ),
                     child: Text(
-                      buttonLabel,
+                      context.tr(buttonLabel),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapStoreCard(_FlowRunnerArenaMap map) {
+    final theme = Theme.of(context);
+    final palette = context.appPalette;
+    final bool isDefaultFreeMap = map == _flowRunnerDefaultMap;
+    final bool isOwned = isDefaultFreeMap || _ownedMaps.contains(map);
+    final bool isSelected = _selectedMap == map;
+    final bool canAfford = isDefaultFreeMap || _diamondBalance >= map.cost;
+    final VoidCallback? onPressed = isSelected
+        ? null
+        : isOwned
+        ? () => _selectMap(map)
+        : canAfford
+        ? () => _buyMap(map)
+        : null;
+    final String buttonLabel = isSelected
+        ? 'Aktywna'
+        : isOwned
+        ? 'Użyj'
+        : context.tr('Kup');
+    final String helperLabel = isSelected
+        ? 'Aktywna mapa w grze'
+        : isDefaultFreeMap
+        ? 'Darmowa mapa startowa'
+        : isOwned
+        ? 'Kupiona i gotowa do użycia'
+        : 'Nowa mapa: 200 diamentów';
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      width: 278,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.surfaceStrong,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color:
+                (isSelected
+                        ? map.borderColor
+                        : isOwned
+                        ? const Color(0xFF2FD675)
+                        : palette.outlinedButtonBorder)
+                    .withValues(alpha: isSelected ? 0.28 : 0.12),
+            blurRadius: isSelected ? 18 : 10,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: map.backgroundColors,
+              ),
+              image: map == _FlowRunnerArenaMap.neonTunnel
+                  ? const DecorationImage(
+                      image: AssetImage(
+                        'assets/backgrounds/flow_runner_spaceship_real.jpg',
+                      ),
+                      fit: BoxFit.cover,
+                      alignment: Alignment.bottomRight,
+                      colorFilter: ColorFilter.mode(
+                        Color(0xFF070C16),
+                        BlendMode.multiply,
+                      ),
+                    )
+                  : null,
+            ),
+            child: Center(
+              child: Icon(
+                Icons.map_rounded,
+                color: Colors.white.withValues(alpha: 0.9),
+                size: 26,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  context.tr(map.label),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontSize: 14,
+                    height: 1.08,
+                    color: palette.primaryText,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  context.tr(map.summary),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
+                    height: 1.2,
+                    color: palette.secondaryText,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: <Widget>[
+                    const _FlowRunnerDiamondGlyph(size: 10),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        context.trf('{count} diamentów', <String, String>{
+                          'count': '${map.cost}',
+                        }),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 12,
+                          color: palette.secondaryText,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  context.tr(
+                    !isOwned && !canAfford ? 'Za mało diamentów' : helperLabel,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontSize: 11,
+                    height: 1.1,
+                    color: !isOwned && !canAfford
+                        ? const Color(0xFFE16A5C)
+                        : palette.tertiaryText,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 78,
+            child: isOwned
+                ? OutlinedButton(
+                    onPressed: onPressed,
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(78, 38),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 10,
+                      ),
+                      side: BorderSide(
+                        color: isSelected
+                            ? map.borderColor.withValues(alpha: 0.42)
+                            : map.borderColor.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    child: Text(
+                      context.tr(buttonLabel),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  )
+                : FilledButton(
+                    onPressed: onPressed,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(78, 38),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 10,
+                      ),
+                    ),
+                    child: Text(
+                      context.tr(buttonLabel),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.labelLarge?.copyWith(
@@ -23137,87 +32200,6 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
           ],
         ),
         const SizedBox(height: 18),
-        SurfaceCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const SectionHeader(
-                eyebrow: 'Animacje',
-                title: 'Ilość diamentów zebranych przez użytkownika',
-              ),
-              const SizedBox(height: 14),
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 240),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2FD675).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: const Color(0xFF2FD675).withValues(alpha: 0.24),
-                      ),
-                    ),
-                    child: Column(
-                      children: <Widget>[
-                        Text(
-                          'Diamenty',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: const Color(0xFF2FD675),
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '$_diamondBalance',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            color: palette.primaryText,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: Text(
-                  'Aktywne: ${_selectedSkin.label}',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: palette.secondaryText,
-                    height: 1.35,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Column(
-                children: _flowRunnerUnlockableSkins
-                    .map(
-                      (_FlowRunnerPlayerSkin skin) => Padding(
-                        padding: EdgeInsets.only(
-                          bottom: skin == _flowRunnerUnlockableSkins.last
-                              ? 0
-                              : 12,
-                        ),
-                        child: _buildSkinStoreCard(skin),
-                      ),
-                    )
-                    .toList(growable: false),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
@@ -23229,7 +32211,7 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(
-                _currentLevel.title,
+                context.tr(_currentLevel.title),
                 style: theme.textTheme.titleLarge?.copyWith(
                   color: palette.primaryText,
                   fontWeight: FontWeight.w900,
@@ -23237,7 +32219,7 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
               ),
               const SizedBox(height: 8),
               Text(
-                _currentLevel.summary,
+                context.tr(_currentLevel.summary),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: palette.secondaryText,
                   height: 1.45,
@@ -23247,11 +32229,16 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
               SizedBox(
                 width: double.infinity,
                 height: 280,
-                child: _FlowRunnerPreviewArena(selectedSkin: _selectedSkin),
+                child: _FlowRunnerPreviewArena(
+                  selectedSkin: _selectedSkin,
+                  selectedMap: _selectedMap,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
-                'Przesuwaj palcem w lewo i w prawo po ekranie. Kulka płynnie podąża za ruchem, a arena stopniowo podkręca tempo.',
+                context.tr(
+                  'Przesuwaj palcem w lewo i w prawo po ekranie. Kulka płynnie podąża za ruchem, a arena stopniowo podkręca tempo.',
+                ),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: palette.tertiaryText,
                   height: 1.45,
@@ -23266,7 +32253,7 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
             constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
             child: FilledButton(
               onPressed: _start,
-              child: const Text('Start sesji'),
+              child: Text(context.tr('Start sesji')),
             ),
           ),
         ),
@@ -23275,25 +32262,28 @@ class _FlowRunnerTrainerState extends State<FlowRunnerTrainer> {
   }
 }
 
-class FlowRunnerSessionPage extends StatefulWidget {
-  const FlowRunnerSessionPage({
-    super.key,
+class _FlowRunnerSessionPage extends StatefulWidget {
+  const _FlowRunnerSessionPage({
     required this.accent,
     required this.selectedSkin,
+    required this.selectedMap,
   });
 
   final Color accent;
   final _FlowRunnerPlayerSkin selectedSkin;
+  final _FlowRunnerArenaMap selectedMap;
 
   @override
-  State<FlowRunnerSessionPage> createState() => _FlowRunnerSessionPageState();
+  State<_FlowRunnerSessionPage> createState() => _FlowRunnerSessionPageState();
 }
 
-class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
+class _FlowRunnerSessionPageState extends State<_FlowRunnerSessionPage> {
   static const int _sessionStartCountdownSeconds = 3;
   static const int _maxSessionDiamonds = 5;
   static const double _playerY = 0.82;
   static const double _entityHitThresholdX = 0.11;
+  static const double _meteorHitThresholdMultiplier = 2.0;
+  static const double _meteorHitThresholdY = 0.14;
 
   final Random _random = Random();
   Timer? _countdownTimer;
@@ -23308,13 +32298,19 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
   int _streak = 0;
   int _bestStreak = 0;
   int _diamondsCollected = 0;
+  int _diamondBalance = 0;
+  Set<_FlowRunnerArenaMap> _ownedMaps = <_FlowRunnerArenaMap>{};
   int _energy = 0;
   int _hitFlashFrames = 0;
   int _entityIdCounter = 0;
   int _lastDiamondTierSpawned = 0;
+  int _lastLifeTierSpawned = 0;
   double _spawnCooldownSeconds = 0.0;
   DateTime? _lastFrameAt;
   List<_FlowRunnerEntity> _entities = <_FlowRunnerEntity>[];
+  bool _showSessionLauncher = true;
+  late _FlowRunnerPlayerSkin _sessionSkin;
+  late _FlowRunnerArenaMap _sessionMap;
 
   _FlowRunnerLevelDefinition get _levelDefinition =>
       _flowRunnerLevelDefinitions.first;
@@ -23323,11 +32319,39 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
   void initState() {
     super.initState();
     _energy = _levelDefinition.maxEnergy;
+    _sessionSkin = widget.selectedSkin;
+    _sessionMap = widget.selectedMap;
+    _loadSessionCustomization();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _enterFullscreenSessionMode();
-      if (mounted) {
-        _startCountdown();
+    });
+  }
+
+  Future<void> _loadSessionCustomization() async {
+    final prefs = await SharedPreferences.getInstance();
+    final int stored =
+        prefs.getInt(_FlowRunnerTrainerState._diamondBalancePrefsKey) ?? 0;
+    final Set<_FlowRunnerArenaMap> storedOwnedMaps =
+        prefs
+            .getStringList(_FlowRunnerTrainerState._ownedMapsPrefsKey)
+            ?.map(_flowRunnerArenaMapFromId)
+            .where(
+              (_FlowRunnerArenaMap map) =>
+                  _isFlowRunnerMapAvailable(map) &&
+                  map != _flowRunnerDefaultMap,
+            )
+            .toSet() ??
+        <_FlowRunnerArenaMap>{};
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _diamondBalance = stored;
+      _ownedMaps = storedOwnedMaps;
+      if (_sessionMap != _flowRunnerDefaultMap &&
+          !_ownedMaps.contains(_sessionMap)) {
+        _sessionMap = _flowRunnerDefaultMap;
       }
     });
   }
@@ -23339,7 +32363,7 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
     if (value == null) {
       return '';
     }
-    return value == 0 ? 'START' : '$value';
+    return value == 0 ? context.tr('START') : '$value';
   }
 
   double get _rawTempoProgress {
@@ -23373,6 +32397,11 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
   int _diamondTierForProgress(double rawProgress) {
     final int percent = max(1, (rawProgress * 100).round());
     return percent ~/ 25;
+  }
+
+  int _lifeTierForProgress(double rawProgress) {
+    final int percent = max(1, (rawProgress * 100).round());
+    return percent ~/ 75;
   }
 
   bool get _isGoldenTempoPhase =>
@@ -23410,9 +32439,11 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
       _hitFlashFrames = 0;
       _entityIdCounter = 0;
       _lastDiamondTierSpawned = 0;
+      _lastLifeTierSpawned = 0;
       _spawnCooldownSeconds = 0.72;
       _entities = <_FlowRunnerEntity>[];
       _lastFrameAt = null;
+      _showSessionLauncher = false;
     });
 
     HapticFeedback.selectionClick();
@@ -23493,6 +32524,7 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
     int nextBestStreak = _bestStreak;
     int nextDiamondsCollected = _diamondsCollected;
     int nextDiamondTierSpawned = _lastDiamondTierSpawned;
+    int nextLifeTierSpawned = _lastLifeTierSpawned;
     int nextHitFlashFrames = max(0, _hitFlashFrames - 1);
     bool triggerHitHaptic = false;
     bool triggerBonusHaptic = false;
@@ -23518,18 +32550,35 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
       activeEntities.add(_spawnDiamondEntity(activeEntities));
     }
 
+    final bool hasActiveLife = activeEntities.any(
+      (_FlowRunnerEntity entity) => entity.kind == _FlowRunnerEntityKind.life,
+    );
+    final int currentLifeTier = _lifeTierForProgress(nextRawProgress);
+    if (!hasActiveLife && currentLifeTier > nextLifeTierSpawned) {
+      nextLifeTierSpawned += 1;
+      activeEntities.add(_spawnLifeEntity(activeEntities));
+    }
+
     final List<_FlowRunnerEntity> nextEntities = <_FlowRunnerEntity>[];
     for (final _FlowRunnerEntity entity in activeEntities) {
       _FlowRunnerEntity updated = entity.copyWith(
         y: entity.y + (currentSpeed * entity.speedFactor * deltaSeconds),
       );
       final double distanceToPlayer = (updated.y - _playerY).abs();
+      final double hitThresholdX = updated.kind == _FlowRunnerEntityKind.meteor
+          ? _entityHitThresholdX * _meteorHitThresholdMultiplier
+          : _entityHitThresholdX;
+      final double hitThresholdY = updated.kind == _FlowRunnerEntityKind.meteor
+          ? _meteorHitThresholdY
+          : 0.07;
       final bool intersectsPlayer =
-          (updated.trackX - _playerTrackX).abs() <= _entityHitThresholdX;
+          (updated.trackX - _playerTrackX).abs() <= hitThresholdX;
 
-      if (intersectsPlayer && distanceToPlayer <= 0.07) {
+      if (intersectsPlayer && distanceToPlayer <= hitThresholdY) {
         if (updated.kind == _FlowRunnerEntityKind.bonus) {
           nextDiamondsCollected += 1;
+          triggerBonusHaptic = true;
+        } else if (updated.kind == _FlowRunnerEntityKind.life) {
           nextEnergy = min(_levelDefinition.maxEnergy, nextEnergy + 1);
           triggerBonusHaptic = true;
         } else {
@@ -23542,7 +32591,9 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
         continue;
       }
 
-      if (!updated.scored && updated.kind == _FlowRunnerEntityKind.obstacle) {
+      if (!updated.scored &&
+          (updated.kind == _FlowRunnerEntityKind.obstacle ||
+              updated.kind == _FlowRunnerEntityKind.meteor)) {
         if (updated.y > _playerY + 0.08) {
           nextScore += 1;
           nextStreak += 1;
@@ -23570,6 +32621,7 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
       _energy = nextEnergy;
       _hitFlashFrames = nextHitFlashFrames;
       _lastDiamondTierSpawned = nextDiamondTierSpawned;
+      _lastLifeTierSpawned = nextLifeTierSpawned;
     });
 
     if (triggerHitHaptic) {
@@ -23642,13 +32694,97 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
     double rawProgress,
   ) {
     _entityIdCounter += 1;
+    final bool spawnMeteor =
+        _sessionMap == _FlowRunnerArenaMap.neonTunnel &&
+        _random.nextDouble() < 0.24;
+    final bool spawnIcicle =
+        _sessionMap == _FlowRunnerArenaMap.icePeaks &&
+        !spawnMeteor &&
+        _random.nextDouble() < 0.44;
+    final bool spawnScaffold =
+        _sessionMap == _FlowRunnerArenaMap.towerCrane &&
+        !spawnMeteor &&
+        !spawnIcicle &&
+        _random.nextDouble() < 0.46;
+    final bool spawnRebar =
+        _sessionMap == _FlowRunnerArenaMap.towerCrane &&
+        !spawnMeteor &&
+        !spawnIcicle &&
+        !spawnScaffold &&
+        _random.nextDouble() < 0.5;
+    final bool spawnLavaBomb =
+        _sessionMap == _FlowRunnerArenaMap.volcanoCore &&
+        !spawnMeteor &&
+        !spawnIcicle &&
+        !spawnScaffold &&
+        !spawnRebar &&
+        _random.nextDouble() < 0.54;
+    final bool spawnLavaSpire =
+        _sessionMap == _FlowRunnerArenaMap.volcanoCore &&
+        !spawnMeteor &&
+        !spawnIcicle &&
+        !spawnScaffold &&
+        !spawnRebar &&
+        !spawnLavaBomb &&
+        _random.nextDouble() < 0.66;
+    final bool spawnBasketball =
+        _sessionMap == _FlowRunnerArenaMap.basketArena &&
+        !spawnMeteor &&
+        !spawnIcicle &&
+        !spawnScaffold &&
+        !spawnRebar &&
+        !spawnLavaBomb &&
+        !spawnLavaSpire &&
+        _random.nextDouble() < 0.56;
+    final bool spawnHoop =
+        _sessionMap == _FlowRunnerArenaMap.basketArena &&
+        !spawnMeteor &&
+        !spawnIcicle &&
+        !spawnScaffold &&
+        !spawnRebar &&
+        !spawnLavaBomb &&
+        !spawnLavaSpire &&
+        !spawnBasketball &&
+        _random.nextDouble() < 0.8;
     return _FlowRunnerEntity(
       id: _entityIdCounter,
-      kind: _FlowRunnerEntityKind.obstacle,
+      kind: spawnMeteor
+          ? _FlowRunnerEntityKind.meteor
+          : _FlowRunnerEntityKind.obstacle,
       trackX: _pickSpawnTrackX(activeEntities, pressurePlayer: true),
       y: -0.16,
-      speedFactor: 1.0,
+      speedFactor: spawnIcicle
+          ? 1.24
+          : (spawnScaffold || spawnRebar)
+          ? 1.12
+          : (spawnLavaBomb || spawnLavaSpire)
+          ? 1.16
+          : (spawnBasketball || spawnHoop)
+          ? 1.08
+          : (spawnMeteor ? 0.92 : 1.0),
       obstacleColor: _obstacleColorForProgress(rawProgress),
+      visualScale: spawnIcicle
+          ? 0.88 + (_random.nextDouble() * 0.24)
+          : (spawnLavaBomb || spawnLavaSpire)
+          ? 0.86 + (_random.nextDouble() * 0.28)
+          : (spawnBasketball || spawnHoop)
+          ? 0.8 + (_random.nextDouble() * 0.26)
+          : 0.7 + (_random.nextDouble() * 0.5),
+      visualRotation: spawnIcicle
+          ? (_random.nextDouble() - 0.5) * 0.16
+          : (spawnScaffold || spawnRebar)
+          ? (_random.nextDouble() - 0.5) * 0.2
+          : (spawnLavaSpire || spawnHoop)
+          ? (_random.nextDouble() - 0.5) * 0.14
+          : (_random.nextDouble() - 0.5) * 1.2,
+      isIcicle: spawnIcicle,
+      isScaffold: spawnScaffold,
+      isRebar: spawnRebar,
+      isLavaBomb: spawnLavaBomb,
+      isLavaSpire: spawnLavaSpire,
+      isBasketball: spawnBasketball,
+      isHoop: spawnHoop,
+      glowStrength: 0.2 + (_random.nextDouble() * 0.42),
     );
   }
 
@@ -23662,6 +32798,17 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
       trackX: _pickSpawnTrackX(activeEntities),
       y: -0.18,
       speedFactor: 0.96,
+    );
+  }
+
+  _FlowRunnerEntity _spawnLifeEntity(List<_FlowRunnerEntity> activeEntities) {
+    _entityIdCounter += 1;
+    return _FlowRunnerEntity(
+      id: _entityIdCounter,
+      kind: _FlowRunnerEntityKind.life,
+      trackX: _pickSpawnTrackX(activeEntities),
+      y: -0.18,
+      speedFactor: 0.98,
     );
   }
 
@@ -23719,6 +32866,161 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
     });
   }
 
+  void _handleLaunchStart() {
+    if (_running || _isCountingDown) {
+      return;
+    }
+    _startCountdown();
+  }
+
+  Future<void> _handleLaunchChangeVehicle() async {
+    if (_running || _isCountingDown) {
+      return;
+    }
+
+    final _FlowRunnerPlayerSkin? selectedSkin = await Navigator.of(context)
+        .push<_FlowRunnerPlayerSkin>(
+          MaterialPageRoute<_FlowRunnerPlayerSkin>(
+            fullscreenDialog: true,
+            builder: (BuildContext context) => _FlowRunnerControlPickerPage(
+              accent: widget.accent,
+              initialSkin: _sessionSkin,
+              diamondBalance: _diamondBalance + _diamondsCollected,
+              title: context.tr('Zmiana sterowania'),
+              subtitle: context.tr('Wybierz sterowanie i pojazd do jazdy'),
+              ctaLabel: context.tr('Użyj sterowania'),
+            ),
+          ),
+        );
+
+    if (!mounted || selectedSkin == null || selectedSkin == _sessionSkin) {
+      return;
+    }
+
+    setState(() {
+      _sessionSkin = selectedSkin;
+    });
+  }
+
+  Future<void> _handleLaunchChangeMap() async {
+    if (_running || _isCountingDown) {
+      return;
+    }
+
+    final _FlowRunnerMapPickerResult? result = await Navigator.of(context)
+        .push<_FlowRunnerMapPickerResult>(
+          MaterialPageRoute<_FlowRunnerMapPickerResult>(
+            fullscreenDialog: true,
+            builder: (BuildContext context) => _FlowRunnerMapPickerPage(
+              initialMap: _sessionMap,
+              diamondBalance: _diamondBalance + _diamondsCollected,
+              unlockedMaps: _ownedMaps,
+            ),
+          ),
+        );
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      _FlowRunnerTrainerState._diamondBalancePrefsKey,
+      result.diamondBalance,
+    );
+    await prefs.setStringList(
+      _FlowRunnerTrainerState._ownedMapsPrefsKey,
+      result.unlockedMaps
+          .map((_FlowRunnerArenaMap map) => map.id)
+          .toList(growable: false),
+    );
+
+    setState(() {
+      _sessionMap = result.selectedMap;
+      _ownedMaps = result.unlockedMaps;
+      _diamondBalance = max(0, result.diamondBalance - _diamondsCollected);
+    });
+  }
+
+  Future<void> _handleLaunchDiamonds() async {
+    if (_running || _isCountingDown) {
+      return;
+    }
+
+    final int? updatedBalance = await Navigator.of(context).push<int>(
+      MaterialPageRoute<int>(
+        fullscreenDialog: true,
+        builder: (BuildContext context) => _FlowRunnerDiamondStorePage(
+          initialBalance: _diamondBalance + _diamondsCollected,
+        ),
+      ),
+    );
+
+    if (!mounted || updatedBalance == null) {
+      return;
+    }
+    setState(() {
+      _diamondBalance = max(0, updatedBalance - _diamondsCollected);
+    });
+  }
+
+  void _handleLaunchExit() {
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _openMeteorModelPicker() async {
+    if (_finished || _isCountingDown || _showSessionLauncher) {
+      return;
+    }
+
+    final bool wasRunning = _running;
+    if (wasRunning) {
+      _gameLoopTimer?.cancel();
+      _gameLoopTimer = null;
+      setState(() {
+        _running = false;
+      });
+    }
+
+    final _FlowRunnerPlayerSkin? selectedSkin = await Navigator.of(context)
+        .push<_FlowRunnerPlayerSkin>(
+          MaterialPageRoute<_FlowRunnerPlayerSkin>(
+            fullscreenDialog: true,
+            builder: (BuildContext context) => _FlowRunnerControlPickerPage(
+              accent: widget.accent,
+              initialSkin: _sessionSkin,
+              diamondBalance: _diamondBalance + _diamondsCollected,
+              title: context.tr('Zmiana sterowania'),
+              subtitle: context.tr(
+                'Kliknięty meteoryt otwiera hangar sterowań',
+              ),
+              ctaLabel: context.tr('Graj tym modelem'),
+            ),
+          ),
+        );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (selectedSkin != null && selectedSkin != _sessionSkin) {
+      setState(() {
+        _sessionSkin = selectedSkin;
+      });
+    }
+
+    if (wasRunning && !_finished) {
+      setState(() {
+        _running = true;
+        _lastFrameAt = DateTime.now();
+      });
+      _gameLoopTimer = Timer.periodic(
+        const Duration(milliseconds: 16),
+        _handleGameFrame,
+      );
+    }
+  }
+
   void _cancelTimers() {
     _countdownTimer?.cancel();
     _gameLoopTimer?.cancel();
@@ -23732,58 +33034,160 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
     super.dispose();
   }
 
-  Widget _buildTopBadge({
-    required String label,
-    required String value,
-    required ThemeData theme,
-    Color? tint,
-    Widget? leading,
-  }) {
-    final Color effectiveTint = tint ?? widget.accent;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      decoration: BoxDecoration(
-        color: effectiveTint.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: effectiveTint.withValues(alpha: 0.22)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          SizedBox(
-            width: double.infinity,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
+  Widget _buildLauncherOverlay(ThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            TextButton(
+              onPressed: _handleLaunchStart,
               child: Text(
-                label,
-                maxLines: 1,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.72),
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.2,
+                context.tr('Start'),
+                style: theme.textTheme.headlineLarge?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 2),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: _handleLaunchChangeVehicle,
+              child: Text(
+                context.tr('Zmiana sterowania'),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.94),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: _handleLaunchChangeMap,
+              child: Text(
+                context.tr('Mapy'),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.94),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: _handleLaunchDiamonds,
+              child: Text(
+                context.tr('Diamenty'),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.94),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: _handleLaunchExit,
+              child: Text(
+                context.tr('Wyjście'),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSessionTopBar(ThemeData theme) {
+    final double rocketPhase = _elapsedMilliseconds / 1000;
+    final double rocketTilt = -0.18 + (sin(rocketPhase * 6.2) * 0.05);
+    final double flamePulse =
+        0.75 + (0.25 * ((sin((rocketPhase * 10.4) + 0.8) + 1) / 2));
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
           Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              if (leading != null) ...<Widget>[
-                leading,
-                const SizedBox(width: 5),
-              ],
-              Flexible(
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                  ),
+              Icon(
+                Icons.diamond_rounded,
+                color: Colors.white.withValues(alpha: 0.92),
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$_diamondsCollected',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Icon(
+                Icons.favorite_rounded,
+                color: const Color(0xFFE54B5F),
+                size: 20,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$_energy',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: <Widget>[
+                    Positioned(
+                      bottom: 1,
+                      child: Container(
+                        width: 3,
+                        height: 5 * flamePulse,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: <Color>[
+                              const Color(0xFFFFF2C9).withValues(alpha: 0.86),
+                              const Color(0xFFFF9E4A).withValues(alpha: 0.72),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                    Transform.rotate(
+                      angle: rocketTilt,
+                      child: Icon(
+                        Icons.rocket_launch_rounded,
+                        color: Colors.white.withValues(alpha: 0.96),
+                        size: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '$_tempoPercent%',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],
@@ -23796,93 +33200,75 @@ class _FlowRunnerSessionPageState extends State<FlowRunnerSessionPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final bool showSessionHud =
+        !_showSessionLauncher && (_running || _finished);
 
     return Scaffold(
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onPanStart: _handlePanStart,
         onPanUpdate: _handlePanUpdate,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[
-                const Color(0xFF06111A),
-                const Color(0xFF0B1E29),
-                widget.accent.withValues(alpha: 0.38),
-              ],
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            _FlowRunnerArena(
+              accent: widget.accent,
+              playerTrackX: _playerTrackX,
+              playerPulse: _running
+                  ? (_elapsedMilliseconds ~/ 140).isEven
+                  : false,
+              playerSkin: _sessionSkin,
+              selectedMap: _sessionMap,
+              goldenPhase: _isGoldenTempoPhase,
+              entities: _entities,
+              scenePhase: _elapsedMilliseconds / 1000,
+              onMeteorTap: _openMeteorModelPicker,
+              showHitFlash: _hitFlashFrames > 0,
+              countdownLabel: _isCountingDown ? _countdownLabel : null,
+              summaryTitle: _finished ? context.tr('Koniec') : null,
+              summarySubtitle: _finished
+                  ? context.trf('Punkty {score}', <String, String>{
+                      'score': '$_score',
+                    })
+                  : null,
+              edgeToEdge: true,
             ),
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 20),
-              child: Column(
-                children: <Widget>[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _buildTopBadge(
-                          label: 'Punkty',
-                          value: '$_score',
-                          theme: theme,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildTopBadge(
-                          label: 'Diamenty',
-                          value: '$_diamondsCollected',
-                          theme: theme,
-                          tint: const Color(0xFF2FD675),
-                          leading: const _FlowRunnerDiamondGlyph(size: 11),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildTopBadge(
-                          label: 'Energia',
-                          value: '$_energy/${_levelDefinition.maxEnergy}',
-                          theme: theme,
-                          tint: _energy <= 1
-                              ? const Color(0xFFE16A5C)
-                              : widget.accent,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildTopBadge(
-                          label: 'Tempo',
-                          value: '$_tempoPercent%',
-                          theme: theme,
-                          tint: _levelDefinition.tint,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Expanded(
-                    child: _FlowRunnerArena(
-                      accent: widget.accent,
-                      playerTrackX: _playerTrackX,
-                      playerPulse: _running
-                          ? (_elapsedMilliseconds ~/ 140).isEven
-                          : false,
-                      playerSkin: widget.selectedSkin,
-                      goldenPhase: _isGoldenTempoPhase,
-                      entities: _entities,
-                      scenePhase: _elapsedMilliseconds / 1000,
-                      showHitFlash: _hitFlashFrames > 0,
-                      countdownLabel: _isCountingDown ? _countdownLabel : null,
-                      summaryTitle: _finished ? 'Koniec' : null,
-                      summarySubtitle: _finished ? 'Punkty $_score' : null,
+            if (_showSessionLauncher)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  image: const DecorationImage(
+                    image: AssetImage(
+                      'assets/backgrounds/flow_runner_spaceship_real.jpg',
+                    ),
+                    fit: BoxFit.cover,
+                    alignment: Alignment.bottomRight,
+                    colorFilter: ColorFilter.mode(
+                      Color(0xFF060B14),
+                      BlendMode.multiply,
                     ),
                   ),
-                ],
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: <Color>[
+                      Colors.black.withValues(alpha: 0.5),
+                      Colors.black.withValues(alpha: 0.66),
+                    ],
+                  ),
+                ),
+                child: _buildLauncherOverlay(theme),
               ),
-            ),
-          ),
+            if (showSessionHud)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: _buildSessionTopBar(theme),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -23927,27 +33313,33 @@ class _FlowRunnerArena extends StatelessWidget {
     required this.accent,
     required this.playerTrackX,
     required this.playerPulse,
-    this.playerSkin = _FlowRunnerPlayerSkin.orb,
+    this.playerSkin = _flowRunnerDefaultSkin,
+    this.selectedMap = _flowRunnerDefaultMap,
     required this.entities,
     required this.scenePhase,
+    this.onMeteorTap,
     this.goldenPhase = false,
     this.showHitFlash = false,
     this.countdownLabel,
     this.summaryTitle,
     this.summarySubtitle,
+    this.edgeToEdge = false,
   });
 
   final Color accent;
   final double playerTrackX;
   final bool playerPulse;
   final _FlowRunnerPlayerSkin playerSkin;
+  final _FlowRunnerArenaMap selectedMap;
   final List<_FlowRunnerEntity> entities;
   final double scenePhase;
+  final VoidCallback? onMeteorTap;
   final bool goldenPhase;
   final bool showHitFlash;
   final String? countdownLabel;
   final String? summaryTitle;
   final String? summarySubtitle;
+  final bool edgeToEdge;
 
   @override
   Widget build(BuildContext context) {
@@ -23955,18 +33347,43 @@ class _FlowRunnerArena extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-        color: const Color(0xFF0D1D28),
-        border: Border.all(color: accent.withValues(alpha: 0.18)),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: accent.withValues(alpha: 0.14),
-            blurRadius: 28,
-            offset: const Offset(0, 18),
-          ),
-        ],
+        borderRadius: edgeToEdge
+            ? BorderRadius.zero
+            : BorderRadius.circular(30),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: selectedMap.backgroundColors,
+        ),
+        image: selectedMap == _FlowRunnerArenaMap.neonTunnel
+            ? const DecorationImage(
+                image: AssetImage(
+                  'assets/backgrounds/flow_runner_spaceship_real.jpg',
+                ),
+                fit: BoxFit.cover,
+                alignment: Alignment.bottomRight,
+                colorFilter: ColorFilter.mode(
+                  Color(0xFF060B14),
+                  BlendMode.multiply,
+                ),
+              )
+            : null,
+        border: edgeToEdge
+            ? null
+            : Border.all(
+                color: selectedMap.borderColor.withValues(alpha: 0.34),
+              ),
+        boxShadow: edgeToEdge
+            ? const <BoxShadow>[]
+            : <BoxShadow>[
+                BoxShadow(
+                  color: selectedMap.borderColor.withValues(alpha: 0.22),
+                  blurRadius: 28,
+                  offset: const Offset(0, 18),
+                ),
+              ],
       ),
-      clipBehavior: Clip.antiAlias,
+      clipBehavior: edgeToEdge ? Clip.hardEdge : Clip.antiAlias,
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
           final double playerCenterY = constraints.maxHeight * 0.82;
@@ -23979,7 +33396,7 @@ class _FlowRunnerArena extends StatelessWidget {
               Positioned.fill(
                 child: CustomPaint(
                   painter: _FlowRunnerTrackPainter(
-                    accent: accent,
+                    selectedMap: selectedMap,
                     phase: scenePhase,
                     showHitFlash: showHitFlash,
                   ),
@@ -23989,12 +33406,30 @@ class _FlowRunnerArena extends StatelessWidget {
                 Positioned(
                   left: (constraints.maxWidth * entity.trackX) - 28,
                   top: (constraints.maxHeight * entity.y) - 22,
-                  child: _FlowRunnerEntityVisual(
-                    kind: entity.kind,
-                    accent: accent,
-                    obstacleColor: goldenPhase
-                        ? _flowRunnerGoldColor
-                        : entity.obstacleColor,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: entity.kind == _FlowRunnerEntityKind.meteor
+                        ? onMeteorTap
+                        : null,
+                    child: _FlowRunnerEntityVisual(
+                      kind: entity.kind,
+                      accent: accent,
+                      selectedMap: selectedMap,
+                      isIcicle: entity.isIcicle,
+                      isScaffold: entity.isScaffold,
+                      isRebar: entity.isRebar,
+                      isLavaBomb: entity.isLavaBomb,
+                      isLavaSpire: entity.isLavaSpire,
+                      isBasketball: entity.isBasketball,
+                      isHoop: entity.isHoop,
+                      motionPhase: scenePhase + (entity.trackX * 1.7),
+                      visualScale: entity.visualScale,
+                      visualRotation: entity.visualRotation,
+                      glowStrength: entity.glowStrength,
+                      obstacleColor: goldenPhase
+                          ? _flowRunnerGoldColor
+                          : entity.obstacleColor,
+                    ),
                   ),
                 ),
               Positioned(
@@ -24003,6 +33438,7 @@ class _FlowRunnerArena extends StatelessWidget {
                 child: _FlowRunnerPlayer(
                   accent: accent,
                   pulse: playerPulse,
+                  motionPhase: scenePhase,
                   skin: playerSkin,
                   goldenPhase: goldenPhase,
                 ),
@@ -24022,7 +33458,8 @@ class _FlowRunnerArena extends StatelessWidget {
                             style: theme.textTheme.displaySmall?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w900,
-                              letterSpacing: countdownLabel == 'START'
+                              letterSpacing:
+                                  countdownLabel == context.tr('START')
                                   ? 1.2
                                   : 0,
                             ),
@@ -24060,9 +33497,13 @@ class _FlowRunnerArena extends StatelessWidget {
 }
 
 class _FlowRunnerPreviewArena extends StatefulWidget {
-  const _FlowRunnerPreviewArena({required this.selectedSkin});
+  const _FlowRunnerPreviewArena({
+    required this.selectedSkin,
+    required this.selectedMap,
+  });
 
   final _FlowRunnerPlayerSkin selectedSkin;
+  final _FlowRunnerArenaMap selectedMap;
 
   @override
   State<_FlowRunnerPreviewArena> createState() =>
@@ -24130,6 +33571,7 @@ class _FlowRunnerPreviewArenaState extends State<_FlowRunnerPreviewArena> {
       playerTrackX: playerTrackX,
       playerPulse: _step.isEven,
       playerSkin: widget.selectedSkin,
+      selectedMap: widget.selectedMap,
       entities: previewEntities,
       scenePhase: phase,
     );
@@ -24140,19 +33582,158 @@ class _FlowRunnerPlayer extends StatelessWidget {
   const _FlowRunnerPlayer({
     required this.accent,
     required this.pulse,
-    this.skin = _FlowRunnerPlayerSkin.orb,
+    this.motionPhase = 0,
+    this.skin = _flowRunnerDefaultSkin,
     this.goldenPhase = false,
     this.size = 40,
   });
 
   final Color accent;
   final bool pulse;
+  final double motionPhase;
   final _FlowRunnerPlayerSkin skin;
   final bool goldenPhase;
   final double size;
 
   @override
   Widget build(BuildContext context) {
+    final String? imageAssetPath = skin.imageAssetPath;
+    if (imageAssetPath != null) {
+      final bool isRocketSkin = skin == _FlowRunnerPlayerSkin.rocket;
+      final double sway = sin(motionPhase * 3.2);
+      final double bob = sin((motionPhase * 5.2) + 1.1);
+      final Widget photo = isRocketSkin
+          ? SizedBox(
+              width: size * 1.16,
+              height: size * 1.16,
+              child: Image.asset(
+                imageAssetPath,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.high,
+              ),
+            )
+          : ClipRRect(
+              borderRadius: BorderRadius.circular(size * 0.28),
+              child: Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage(imageAssetPath),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            );
+
+      final Widget animatedVehicle = switch (skin) {
+        _FlowRunnerPlayerSkin.f16 => Transform.rotate(
+          angle: (sway * 0.12) - 0.1,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: <Widget>[
+              Positioned(
+                left: -size * 0.48,
+                child: Container(
+                  width: size * 0.44,
+                  height: size * 0.08,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.42),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              photo,
+            ],
+          ),
+        ),
+        _FlowRunnerPlayerSkin.helicopter => Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: <Widget>[
+            Transform.rotate(
+              angle: motionPhase * 14,
+              child: Container(
+                width: size * 1.2,
+                height: size * 0.08,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.34),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+          ],
+        ),
+        _FlowRunnerPlayerSkin.rocket => Transform.rotate(
+          angle: -0.12 + (sway * 0.05),
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: <Widget>[
+              Positioned(
+                bottom: -size * 0.34,
+                child: Container(
+                  width: size * 0.22,
+                  height: size * (0.28 + (0.08 * ((bob + 1) / 2))),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: <Color>[
+                        const Color(0xFFFFF3B0).withValues(alpha: 0.9),
+                        const Color(0xFFFFA43B).withValues(alpha: 0.7),
+                        const Color(0xFFFF5A3B).withValues(alpha: 0.2),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              photo,
+            ],
+          ),
+        ),
+        _ => photo,
+      };
+
+      final Widget imageSkin = isRocketSkin
+          ? animatedVehicle
+          : Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(size * 0.28),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.46)),
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: Colors.white.withValues(
+                      alpha: goldenPhase ? 0.26 : 0.14,
+                    ),
+                    blurRadius: 16,
+                    spreadRadius: 1.5,
+                  ),
+                ],
+              ),
+              child: animatedVehicle,
+            );
+
+      final double renderSize = isRocketSkin ? size * 1.2 : size;
+
+      return Transform.translate(
+        offset: Offset(sway * 2.4, bob * 1.6),
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 120),
+          scale: pulse ? 1.03 : 0.97,
+          child: SizedBox(
+            width: renderSize,
+            height: renderSize,
+            child: Center(child: imageSkin),
+          ),
+        ),
+      );
+    }
+
     final List<Color> baseFillColors = switch (skin) {
       _FlowRunnerPlayerSkin.orb => <Color>[
         Colors.white,
@@ -24166,6 +33747,10 @@ class _FlowRunnerPlayer extends StatelessWidget {
         Color(0xFFD7DCE4),
         Color(0xFF8E97A4),
       ],
+      _FlowRunnerPlayerSkin.pinkDot => const <Color>[
+        Color(0xFFFFB6E7),
+        Color(0xFFFF4FC3),
+      ],
       _FlowRunnerPlayerSkin.waterBottle => const <Color>[
         Color(0xFFFFB261),
         Color(0xFFFF7B1F),
@@ -24173,6 +33758,13 @@ class _FlowRunnerPlayer extends StatelessWidget {
       _FlowRunnerPlayerSkin.cylinder => const <Color>[
         Color(0xFF181117),
         Color(0xFFFF5FC8),
+      ],
+      _FlowRunnerPlayerSkin.f16 => <Color>[Colors.white, accent],
+      _FlowRunnerPlayerSkin.helicopter => <Color>[Colors.white, accent],
+      _FlowRunnerPlayerSkin.rocket => <Color>[Colors.white, accent],
+      _FlowRunnerPlayerSkin.ufo => const <Color>[
+        Color(0xFF89FFB7),
+        Color(0xFF27C768),
       ],
     };
     final List<Color> fillColors = goldenPhase
@@ -24188,12 +33780,21 @@ class _FlowRunnerPlayer extends StatelessWidget {
             _FlowRunnerPlayerSkin.triangle => const Color(
               0xFFA2AAB6,
             ).withValues(alpha: 0.32),
+            _FlowRunnerPlayerSkin.pinkDot => const Color(
+              0xFFFF4FC3,
+            ).withValues(alpha: 0.42),
             _FlowRunnerPlayerSkin.waterBottle => const Color(
               0xFFFF7B1F,
             ).withValues(alpha: 0.34),
             _FlowRunnerPlayerSkin.cylinder => const Color(
               0xFFFF5FC8,
             ).withValues(alpha: 0.34),
+            _FlowRunnerPlayerSkin.f16 => accent.withValues(alpha: 0.34),
+            _FlowRunnerPlayerSkin.helicopter => accent.withValues(alpha: 0.34),
+            _FlowRunnerPlayerSkin.rocket => accent.withValues(alpha: 0.34),
+            _FlowRunnerPlayerSkin.ufo => const Color(
+              0xFF50FF9D,
+            ).withValues(alpha: 0.38),
           };
     final Color edgeColor = Colors.white.withValues(alpha: 0.42);
     final Color solidFill = fillColors.last;
@@ -24222,11 +33823,27 @@ class _FlowRunnerPlayer extends StatelessWidget {
         color: solidFill,
         shadows: <Shadow>[Shadow(color: glowColor, blurRadius: size * 0.42)],
       ),
-      _FlowRunnerPlayerSkin.waterBottle => Icon(
-        Icons.sports_bar_rounded,
-        size: size * 0.92,
-        color: solidFill,
-        shadows: <Shadow>[Shadow(color: glowColor, blurRadius: size * 0.4)],
+      _FlowRunnerPlayerSkin.pinkDot => Container(
+        width: size * 0.34,
+        height: size * 0.34,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(colors: fillColors),
+          border: Border.all(color: edgeColor),
+          boxShadow: <BoxShadow>[
+            BoxShadow(color: glowColor, blurRadius: 16, spreadRadius: 2),
+          ],
+        ),
+      ),
+      _FlowRunnerPlayerSkin.waterBottle => SizedBox(
+        width: size * 1.08,
+        height: size * 1.22,
+        child: Transform.rotate(
+          angle: -0.12 + (sin(motionPhase * 2.7) * 0.04),
+          child: CustomPaint(
+            painter: _FlowRunnerBrewCanPainter(glowColor: glowColor),
+          ),
+        ),
       ),
       _FlowRunnerPlayerSkin.cylinder => Container(
         width: size * 0.72,
@@ -24267,13 +33884,62 @@ class _FlowRunnerPlayer extends StatelessWidget {
           ],
         ),
       ),
+      _FlowRunnerPlayerSkin.f16 => SizedBox(
+        width: size * 1.2,
+        height: size * 1.2,
+        child: Transform.rotate(
+          angle: -0.02 + (sin(motionPhase * 3.0) * 0.02),
+          child: CustomPaint(
+            painter: _FlowRunnerF16Painter(glowColor: glowColor),
+          ),
+        ),
+      ),
+      _FlowRunnerPlayerSkin.ufo => SizedBox(
+        width: size * 1.18,
+        height: size * 1.18,
+        child: Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            Container(
+              width: size * 0.92,
+              height: size * 0.92,
+              decoration: BoxDecoration(
+                color: const Color(0xFF39F98E).withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+            ),
+            Transform.rotate(
+              angle: sin(motionPhase * 2.2) * 0.03,
+              child: SizedBox(
+                width: size * 0.95,
+                height: size * 1.02,
+                child: CustomPaint(
+                  painter: _UfoAlienHeadPainter(
+                    edgeColor: edgeColor,
+                    glowColor: glowColor,
+                    blinkFactor:
+                        0.74 + (0.26 * ((sin(motionPhase * 4.6) + 1) / 2)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      _FlowRunnerPlayerSkin.helicopter => const SizedBox.shrink(),
+      _FlowRunnerPlayerSkin.rocket => const SizedBox.shrink(),
     };
     final double rotationTurns = switch (skin) {
       _FlowRunnerPlayerSkin.star => pulse ? 0.02 : -0.02,
       _FlowRunnerPlayerSkin.triangle => pulse ? -0.015 : 0.015,
+      _FlowRunnerPlayerSkin.pinkDot => 0,
       _FlowRunnerPlayerSkin.waterBottle => pulse ? 0.012 : -0.012,
       _FlowRunnerPlayerSkin.cylinder => pulse ? 0.008 : -0.008,
       _FlowRunnerPlayerSkin.orb => 0,
+      _FlowRunnerPlayerSkin.f16 => pulse ? 0.006 : -0.006,
+      _FlowRunnerPlayerSkin.helicopter => 0,
+      _FlowRunnerPlayerSkin.rocket => 0,
+      _FlowRunnerPlayerSkin.ufo => pulse ? 0.01 : -0.01,
     };
     final double scale = pulse ? 1.04 : 0.94;
 
@@ -24293,15 +33959,478 @@ class _FlowRunnerPlayer extends StatelessWidget {
   }
 }
 
+class _FlowRunnerF16Painter extends CustomPainter {
+  const _FlowRunnerF16Painter({required this.glowColor});
+
+  final Color glowColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+
+    final glowPaint = Paint()
+      ..color = glowColor.withValues(alpha: 0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawCircle(center, size.width * 0.36, glowPaint);
+
+    final bodyPath = Path()
+      ..moveTo(size.width * 0.5, size.height * 0.08)
+      ..lineTo(size.width * 0.58, size.height * 0.28)
+      ..lineTo(size.width * 0.61, size.height * 0.58)
+      ..lineTo(size.width * 0.56, size.height * 0.9)
+      ..lineTo(size.width * 0.44, size.height * 0.9)
+      ..lineTo(size.width * 0.39, size.height * 0.58)
+      ..lineTo(size.width * 0.42, size.height * 0.28)
+      ..close();
+
+    final bodyPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Color(0xFFDCE6F0),
+          Color(0xFF9EA8B5),
+          Color(0xFF7A8592),
+        ],
+        stops: <double>[0, 0.52, 1],
+      ).createShader(Offset.zero & size);
+    canvas.drawPath(bodyPath, bodyPaint);
+
+    final wingPaint = Paint()
+      ..color = const Color(0xFFB0BAC8)
+      ..style = PaintingStyle.fill;
+    final wingPath = Path()
+      ..moveTo(size.width * 0.1, size.height * 0.56)
+      ..lineTo(size.width * 0.4, size.height * 0.46)
+      ..lineTo(size.width * 0.4, size.height * 0.62)
+      ..lineTo(size.width * 0.18, size.height * 0.72)
+      ..close();
+    canvas.drawPath(wingPath, wingPaint);
+    canvas.save();
+    canvas.translate(size.width, 0);
+    canvas.scale(-1, 1);
+    canvas.drawPath(wingPath, wingPaint);
+    canvas.restore();
+
+    final tailWingPaint = Paint()..color = const Color(0xFF9AA5B2);
+    final tailWing = Path()
+      ..moveTo(size.width * 0.24, size.height * 0.84)
+      ..lineTo(size.width * 0.42, size.height * 0.72)
+      ..lineTo(size.width * 0.42, size.height * 0.9)
+      ..close();
+    canvas.drawPath(tailWing, tailWingPaint);
+    canvas.save();
+    canvas.translate(size.width, 0);
+    canvas.scale(-1, 1);
+    canvas.drawPath(tailWing, tailWingPaint);
+    canvas.restore();
+
+    final canopyPaint = Paint()
+      ..shader =
+          const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[Color(0xFF3A434F), Color(0xFF0E131B)],
+          ).createShader(
+            Rect.fromLTWH(
+              size.width * 0.44,
+              size.height * 0.22,
+              size.width * 0.12,
+              size.height * 0.2,
+            ),
+          );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          size.width * 0.44,
+          size.height * 0.22,
+          size.width * 0.12,
+          size.height * 0.2,
+        ),
+        const Radius.circular(999),
+      ),
+      canopyPaint,
+    );
+
+    final accentPaint = Paint()..color = const Color(0xFFFF3232);
+    canvas.drawCircle(
+      Offset(size.width * 0.5, size.height * 0.11),
+      size.width * 0.015,
+      accentPaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.2, size.height * 0.61),
+      size.width * 0.014,
+      accentPaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.8, size.height * 0.61),
+      size.width * 0.014,
+      accentPaint,
+    );
+
+    final outline = Paint()
+      ..color = Colors.white.withValues(alpha: 0.42)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    canvas.drawPath(bodyPath, outline);
+  }
+
+  @override
+  bool shouldRepaint(covariant _FlowRunnerF16Painter oldDelegate) {
+    return oldDelegate.glowColor != glowColor;
+  }
+}
+
+class _FlowRunnerBrewCanPainter extends CustomPainter {
+  const _FlowRunnerBrewCanPainter({required this.glowColor});
+
+  final Color glowColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Rect bounds = Offset.zero & size;
+    final Paint glowPaint = Paint()
+      ..color = glowColor.withValues(alpha: 0.34)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(size.width * 0.48, size.height * 0.48),
+        width: size.width * 0.74,
+        height: size.height * 0.62,
+      ),
+      glowPaint,
+    );
+
+    final RRect canBody = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        size.width * 0.23,
+        size.height * 0.18,
+        size.width * 0.54,
+        size.height * 0.62,
+      ),
+      Radius.circular(size.width * 0.12),
+    );
+    final Paint bodyPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Color(0xFFFFC05A),
+          Color(0xFFD47E12),
+          Color(0xFF8A4B0B),
+        ],
+        stops: <double>[0, 0.58, 1],
+      ).createShader(bounds);
+    canvas.drawRRect(canBody, bodyPaint);
+    canvas.drawRRect(
+      canBody,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = Colors.white.withValues(alpha: 0.36),
+    );
+
+    final RRect topCap = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        size.width * 0.24,
+        size.height * 0.12,
+        size.width * 0.52,
+        size.height * 0.1,
+      ),
+      Radius.circular(size.width * 0.08),
+    );
+    canvas.drawRRect(topCap, Paint()..color = const Color(0xFF4A4540));
+    canvas.drawOval(
+      Rect.fromLTWH(
+        size.width * 0.43,
+        size.height * 0.145,
+        size.width * 0.14,
+        size.height * 0.05,
+      ),
+      Paint()..color = const Color(0xFF7D756A),
+    );
+
+    final Path foamPath = Path()
+      ..moveTo(size.width * 0.24, size.height * 0.2)
+      ..quadraticBezierTo(
+        size.width * 0.3,
+        size.height * 0.16,
+        size.width * 0.36,
+        size.height * 0.2,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.44,
+        size.height * 0.14,
+        size.width * 0.52,
+        size.height * 0.2,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.6,
+        size.height * 0.16,
+        size.width * 0.68,
+        size.height * 0.2,
+      )
+      ..lineTo(size.width * 0.68, size.height * 0.24)
+      ..lineTo(size.width * 0.24, size.height * 0.24)
+      ..close();
+    canvas.drawPath(
+      foamPath,
+      Paint()..color = const Color(0xFFFDF0D3).withValues(alpha: 0.95),
+    );
+
+    final RRect label = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        size.width * 0.31,
+        size.height * 0.34,
+        size.width * 0.38,
+        size.height * 0.22,
+      ),
+      Radius.circular(size.width * 0.08),
+    );
+    canvas.drawRRect(label, Paint()..color = const Color(0xFFFFE6B7));
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: 'BREW',
+        style: TextStyle(
+          color: const Color(0xFF3A2208),
+          fontSize: size.width * 0.12,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.6,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        size.width * 0.5 - (textPainter.width / 2),
+        size.height * 0.4 - (textPainter.height / 2),
+      ),
+    );
+
+    final Path flamePath = Path()
+      ..moveTo(size.width * 0.49, size.height * 0.83)
+      ..quadraticBezierTo(
+        size.width * 0.38,
+        size.height * 0.94,
+        size.width * 0.42,
+        size.height * 1.02,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.5,
+        size.height * 0.96,
+        size.width * 0.58,
+        size.height * 1.02,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.62,
+        size.height * 0.94,
+        size.width * 0.51,
+        size.height * 0.83,
+      )
+      ..close();
+    canvas.drawPath(
+      flamePath,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            Color(0xFFFFF1AF),
+            Color(0xFFFFA233),
+            Color(0xFFFF5A1A),
+          ],
+        ).createShader(bounds),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _FlowRunnerBrewCanPainter oldDelegate) {
+    return oldDelegate.glowColor != glowColor;
+  }
+}
+
+class _UfoAlienHeadPainter extends CustomPainter {
+  const _UfoAlienHeadPainter({
+    required this.edgeColor,
+    required this.glowColor,
+    required this.blinkFactor,
+  });
+
+  final Color edgeColor;
+  final Color glowColor;
+  final double blinkFactor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Rect bounds = Offset.zero & size;
+
+    final Paint glowPaint = Paint()
+      ..color = glowColor.withValues(alpha: 0.32)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(size.width * 0.5, size.height * 0.68),
+        width: size.width * 0.72,
+        height: size.height * 0.46,
+      ),
+      glowPaint,
+    );
+
+    final Path headPath = Path()
+      ..moveTo(size.width * 0.5, size.height * 0.08)
+      ..cubicTo(
+        size.width * 0.2,
+        size.height * 0.1,
+        size.width * 0.07,
+        size.height * 0.38,
+        size.width * 0.19,
+        size.height * 0.64,
+      )
+      ..cubicTo(
+        size.width * 0.29,
+        size.height * 0.9,
+        size.width * 0.43,
+        size.height * 0.98,
+        size.width * 0.5,
+        size.height * 0.98,
+      )
+      ..cubicTo(
+        size.width * 0.57,
+        size.height * 0.98,
+        size.width * 0.71,
+        size.height * 0.9,
+        size.width * 0.81,
+        size.height * 0.64,
+      )
+      ..cubicTo(
+        size.width * 0.93,
+        size.height * 0.38,
+        size.width * 0.8,
+        size.height * 0.1,
+        size.width * 0.5,
+        size.height * 0.08,
+      )
+      ..close();
+
+    final Paint headPaint = Paint()
+      ..shader = const RadialGradient(
+        center: Alignment(0, -0.35),
+        radius: 0.95,
+        colors: <Color>[
+          Color(0xFFA8FFD2),
+          Color(0xFF49D984),
+          Color(0xFF129B4E),
+        ],
+        stops: <double>[0, 0.56, 1],
+      ).createShader(bounds);
+    canvas.drawPath(headPath, headPaint);
+
+    final Paint edgePaint = Paint()
+      ..color = edgeColor.withValues(alpha: 0.58)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    canvas.drawPath(headPath, edgePaint);
+
+    _paintEye(
+      canvas,
+      center: Offset(size.width * 0.34, size.height * 0.58),
+      width: size.width * 0.25,
+      height: size.height * 0.4 * blinkFactor,
+      rotation: -0.52,
+    );
+    _paintEye(
+      canvas,
+      center: Offset(size.width * 0.66, size.height * 0.58),
+      width: size.width * 0.25,
+      height: size.height * 0.4 * blinkFactor,
+      rotation: 0.52,
+    );
+  }
+
+  void _paintEye(
+    Canvas canvas, {
+    required Offset center,
+    required double width,
+    required double height,
+    required double rotation,
+  }) {
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(rotation);
+
+    final Rect eyeRect = Rect.fromCenter(
+      center: Offset.zero,
+      width: width,
+      height: height.clamp(4, 9999),
+    );
+
+    final Paint eyePaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[Color(0xFF090D0A), Color(0xFF1C2520)],
+      ).createShader(eyeRect);
+    canvas.drawOval(eyeRect, eyePaint);
+
+    final Paint eyeEdge = Paint()
+      ..color = const Color(0xFF78FFB5).withValues(alpha: 0.24)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.9;
+    canvas.drawOval(eyeRect, eyeEdge);
+
+    final Paint highlightPaint = Paint()
+      ..color = const Color(0xFFA7FFD1).withValues(alpha: 0.72);
+    canvas.drawCircle(
+      Offset(-width * 0.18, -height * 0.18),
+      width * 0.065,
+      highlightPaint,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _UfoAlienHeadPainter oldDelegate) {
+    return oldDelegate.edgeColor != edgeColor ||
+        oldDelegate.glowColor != glowColor ||
+        oldDelegate.blinkFactor != blinkFactor;
+  }
+}
+
 class _FlowRunnerEntityVisual extends StatelessWidget {
   const _FlowRunnerEntityVisual({
     required this.kind,
     required this.accent,
+    required this.selectedMap,
+    this.isIcicle = false,
+    this.isScaffold = false,
+    this.isRebar = false,
+    this.isLavaBomb = false,
+    this.isLavaSpire = false,
+    this.isBasketball = false,
+    this.isHoop = false,
+    this.motionPhase = 0,
+    this.visualScale = 1.0,
+    this.visualRotation = 0.0,
+    this.glowStrength = 0.25,
     this.obstacleColor,
   });
 
   final _FlowRunnerEntityKind kind;
   final Color accent;
+  final _FlowRunnerArenaMap selectedMap;
+  final bool isIcicle;
+  final bool isScaffold;
+  final bool isRebar;
+  final bool isLavaBomb;
+  final bool isLavaSpire;
+  final bool isBasketball;
+  final bool isHoop;
+  final double motionPhase;
+  final double visualScale;
+  final double visualRotation;
+  final double glowStrength;
   final Color? obstacleColor;
 
   @override
@@ -24330,6 +34459,488 @@ class _FlowRunnerEntityVisual extends StatelessWidget {
           ),
         ),
       );
+    }
+
+    if (kind == _FlowRunnerEntityKind.life) {
+      return Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: const Color(0xFF2A0F17).withValues(alpha: 0.72),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: const Color(0xFFE54B5F).withValues(alpha: 0.35),
+              blurRadius: 16,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: const Center(
+          child: Icon(
+            Icons.favorite_rounded,
+            color: Color(0xFFE54B5F),
+            size: 15,
+          ),
+        ),
+      );
+    }
+
+    if (kind == _FlowRunnerEntityKind.meteor) {
+      final double scale = visualScale.clamp(0.7, 1.2);
+      return Transform.rotate(
+        angle: visualRotation + (sin(motionPhase * 2.8) * 0.06),
+        child: Transform.scale(
+          scale: scale,
+          child: SizedBox(
+            width: 88,
+            height: 88,
+            child: Image.asset(
+              'assets/obstacles/meteor_real.png',
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (selectedMap == _FlowRunnerArenaMap.icePeaks) {
+      if (isIcicle) {
+        return Transform.rotate(
+          angle: visualRotation,
+          child: SizedBox(
+            width: 18,
+            height: 66,
+            child: Stack(
+              alignment: Alignment.topCenter,
+              children: <Widget>[
+                Container(
+                  width: 6,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: <Color>[Color(0xFFF4FBFF), Color(0xFF8EC2E3)],
+                    ),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(999),
+                      bottom: Radius.circular(4),
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.58),
+                    ),
+                  ),
+                ),
+                Positioned(bottom: 0, child: _IceIcicle(width: 10, height: 18)),
+              ],
+            ),
+          ),
+        );
+      }
+
+      return Transform.rotate(
+        angle: visualRotation + (sin(motionPhase * 2.0) * 0.05),
+        child: SizedBox(
+          width: 60,
+          height: 54,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.topCenter,
+            children: <Widget>[
+              Positioned(
+                top: 10,
+                child: Container(
+                  width: 56,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: <Color>[Color(0xFFEAF6FF), Color(0xFF8DB3CC)],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.48),
+                    ),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: const Color(0xFFBEE7FF).withValues(alpha: 0.32),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 0,
+                child: Container(
+                  width: 44,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FDFF).withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const Positioned(
+                bottom: 0,
+                left: 14,
+                child: _IceIcicle(width: 8, height: 14),
+              ),
+              const Positioned(
+                bottom: 2,
+                child: _IceIcicle(width: 10, height: 18),
+              ),
+              const Positioned(
+                bottom: 1,
+                right: 14,
+                child: _IceIcicle(width: 7, height: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (selectedMap == _FlowRunnerArenaMap.neonTunnel) {
+      final Color bladeBase = obstacleColor ?? const Color(0xFF87A0FF);
+      final Color bladeCore =
+          Color.lerp(bladeBase, Colors.white, 0.58) ?? Colors.white;
+      final double flicker = 0.86 + (0.14 * ((sin(motionPhase * 11) + 1) / 2));
+      return Transform.rotate(
+        angle: -0.42 + (sin(motionPhase * 2.3) * 0.08),
+        child: SizedBox(
+          width: 70,
+          height: 24,
+          child: Stack(
+            alignment: Alignment.centerLeft,
+            children: <Widget>[
+              Positioned(
+                left: 8,
+                child: Container(
+                  width: 52,
+                  height: 6 * flicker,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: <Color>[
+                        bladeCore.withValues(alpha: 0.94),
+                        bladeBase.withValues(alpha: 0.86),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: bladeBase.withValues(alpha: 0.45),
+                        blurRadius: 14,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Container(
+                width: 14,
+                height: 12,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: <Color>[Color(0xFFC8CDD7), Color(0xFF6D7482)],
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.24),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (selectedMap == _FlowRunnerArenaMap.towerCrane) {
+      if (isRebar) {
+        final double sway = sin(motionPhase * 7.2) * 0.04;
+        return Transform.rotate(
+          angle: visualRotation + sway,
+          child: SizedBox(
+            width: 56,
+            height: 56,
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                for (final double dx in <double>[-10, -3, 4, 11])
+                  Positioned(
+                    left: 28 + dx,
+                    top: 6,
+                    child: Container(
+                      width: 2.4,
+                      height: 44,
+                      color: const Color(0xFF6E7680),
+                    ),
+                  ),
+                for (final double y in <double>[12, 22, 32, 42])
+                  Positioned(
+                    top: y,
+                    child: Container(
+                      width: 30,
+                      height: 1.8,
+                      color: const Color(0xFF8C949E),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }
+      if (isScaffold) {
+        final double pulse = 0.88 + (0.12 * ((sin(motionPhase * 6) + 1) / 2));
+        return Transform.rotate(
+          angle: visualRotation,
+          child: SizedBox(
+            width: 64,
+            height: 50,
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                Container(
+                  width: 62,
+                  height: 30 * pulse,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: <Color>[Color(0xFFE9BF60), Color(0xFFAA7F35)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.black.withValues(alpha: 0.28),
+                    ),
+                  ),
+                ),
+                for (final double x in <double>[12, 26, 40, 54])
+                  Positioned(
+                    left: x,
+                    child: Transform.rotate(
+                      angle: -0.82,
+                      child: Container(
+                        width: 18,
+                        height: 2,
+                        color: Colors.black.withValues(alpha: 0.24),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    if (selectedMap == _FlowRunnerArenaMap.volcanoCore) {
+      if (isLavaSpire) {
+        return Transform.rotate(
+          angle: visualRotation + (sin(motionPhase * 2.1) * 0.03),
+          child: SizedBox(
+            width: 28,
+            height: 68,
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: <Widget>[
+                Container(
+                  width: 16,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: <Color>[Color(0xFF5B2517), Color(0xFF22120C)],
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF6B2A).withValues(alpha: 0.92),
+                      shape: BoxShape.circle,
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(
+                          color: const Color(0xFFFF8E2A).withValues(alpha: 0.5),
+                          blurRadius: 14,
+                          spreadRadius: 1.2,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      if (isLavaBomb) {
+        return Transform.rotate(
+          angle: visualRotation + (sin(motionPhase * 5.8) * 0.07),
+          child: SizedBox(
+            width: 58,
+            height: 58,
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const RadialGradient(
+                      colors: <Color>[
+                        Color(0xFFFFB14A),
+                        Color(0xFFE04B22),
+                        Color(0xFF431B12),
+                      ],
+                      stops: <double>[0.06, 0.58, 1],
+                    ),
+                    border: Border.all(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      width: 1.2,
+                    ),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: const Color(0xFFFF6528).withValues(alpha: 0.42),
+                        blurRadius: 18,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+                for (final Offset shard in <Offset>[
+                  const Offset(-17, -8),
+                  const Offset(14, -12),
+                  const Offset(16, 12),
+                ])
+                  Positioned(
+                    left: 29 + shard.dx,
+                    top: 29 + shard.dy,
+                    child: Container(
+                      width: 5,
+                      height: 5,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFFC55A),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    if (selectedMap == _FlowRunnerArenaMap.basketArena) {
+      if (isHoop) {
+        return Transform.rotate(
+          angle: visualRotation + (sin(motionPhase * 2.2) * 0.04),
+          child: SizedBox(
+            width: 68,
+            height: 56,
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                Positioned(
+                  left: 6,
+                  child: Container(
+                    width: 10,
+                    height: 42,
+                    color: const Color(0xFFB7C1CA),
+                  ),
+                ),
+                Positioned(
+                  left: 14,
+                  child: Container(
+                    width: 36,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDDE4ED),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: Colors.black.withValues(alpha: 0.16),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 8,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFFF6A1A),
+                        width: 4,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      if (isBasketball) {
+        return Transform.rotate(
+          angle: visualRotation + (sin(motionPhase * 7.4) * 0.09),
+          child: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const RadialGradient(
+                colors: <Color>[
+                  Color(0xFFFFB05B),
+                  Color(0xFFEA7424),
+                  Color(0xFFC75712),
+                ],
+                stops: <double>[0.08, 0.62, 1],
+              ),
+              border: Border.all(
+                color: Colors.black.withValues(alpha: 0.34),
+                width: 1.3,
+              ),
+            ),
+            child: Stack(
+              children: <Widget>[
+                Center(
+                  child: Container(
+                    width: 34,
+                    height: 1.7,
+                    color: Colors.black.withValues(alpha: 0.4),
+                  ),
+                ),
+                Center(
+                  child: Container(
+                    width: 1.7,
+                    height: 34,
+                    color: Colors.black.withValues(alpha: 0.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
     }
 
     return Transform.rotate(
@@ -24391,47 +35002,1441 @@ class _FlowRunnerEntityVisual extends StatelessWidget {
   }
 }
 
+class _IceIcicle extends StatelessWidget {
+  const _IceIcicle({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[Color(0xFFE8F7FF), Color(0xFF6EA3C9)],
+          ),
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(999),
+            bottom: Radius.circular(4),
+          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+        ),
+      ),
+    );
+  }
+}
+
+class _FlowRunnerControlPickerPage extends StatefulWidget {
+  const _FlowRunnerControlPickerPage({
+    required this.accent,
+    required this.initialSkin,
+    required this.diamondBalance,
+    required this.title,
+    required this.subtitle,
+    required this.ctaLabel,
+  });
+
+  final Color accent;
+  final _FlowRunnerPlayerSkin initialSkin;
+  final int diamondBalance;
+  final String title;
+  final String subtitle;
+  final String ctaLabel;
+
+  @override
+  State<_FlowRunnerControlPickerPage> createState() =>
+      _FlowRunnerControlPickerPageState();
+}
+
+class _FlowRunnerControlPickerPageState
+    extends State<_FlowRunnerControlPickerPage> {
+  late _FlowRunnerPlayerSkin _selectedSkin;
+  late int _diamondBalance;
+  final Set<_FlowRunnerPlayerSkin> _unlockedSkins = <_FlowRunnerPlayerSkin>{};
+
+  double _previewSizeForSkin(
+    _FlowRunnerPlayerSkin skin, {
+    required bool compact,
+  }) {
+    return switch (skin) {
+      _FlowRunnerPlayerSkin.rocket => compact ? 74 : 80,
+      _FlowRunnerPlayerSkin.f16 => compact ? 68 : 74,
+      _FlowRunnerPlayerSkin.ufo => compact ? 64 : 70,
+      _FlowRunnerPlayerSkin.waterBottle => compact ? 60 : 66,
+      _FlowRunnerPlayerSkin.star => compact ? 56 : 62,
+      _FlowRunnerPlayerSkin.pinkDot => compact ? 46 : 52,
+      _ => compact ? 58 : 64,
+    };
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _diamondBalance = widget.diamondBalance;
+    _selectedSkin = _isFlowRunnerSkinAvailable(widget.initialSkin)
+        ? widget.initialSkin
+        : _flowRunnerDefaultSkin;
+    _unlockedSkins.add(_flowRunnerDefaultSkin);
+    _unlockedSkins.add(_selectedSkin);
+  }
+
+  bool _isUnlocked(_FlowRunnerPlayerSkin skin) {
+    return skin.cost == 0 || _unlockedSkins.contains(skin);
+  }
+
+  bool _canUnlock(_FlowRunnerPlayerSkin skin) {
+    return !_isUnlocked(skin) && _diamondBalance >= skin.cost;
+  }
+
+  void _unlockSkin(_FlowRunnerPlayerSkin skin) {
+    if (!_canUnlock(skin)) {
+      return;
+    }
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _diamondBalance -= skin.cost;
+      _unlockedSkins.add(skin);
+      _selectedSkin = skin;
+    });
+  }
+
+  void _selectSkin(_FlowRunnerPlayerSkin skin) {
+    if (!_isUnlocked(skin)) {
+      _unlockSkin(skin);
+      return;
+    }
+    setState(() {
+      _selectedSkin = skin;
+    });
+  }
+
+  void _confirmSelection() {
+    Navigator.of(context).pop(_selectedSkin);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final double width = MediaQuery.sizeOf(context).width;
+    final bool compact = width < 390;
+    final int crossAxisCount = width < 720 ? 2 : 3;
+
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              image: const DecorationImage(
+                image: AssetImage(
+                  'assets/backgrounds/flow_runner_spaceship_real.jpg',
+                ),
+                fit: BoxFit.cover,
+                alignment: Alignment.bottomRight,
+                colorFilter: ColorFilter.mode(
+                  Color(0xFF050A13),
+                  BlendMode.multiply,
+                ),
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[
+                  Colors.black.withValues(alpha: 0.64),
+                  const Color(0xFF0A1225).withValues(alpha: 0.76),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+              child: Column(
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          context.tr(widget.title),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 48),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.24),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(
+                          Icons.diamond_rounded,
+                          size: 16,
+                          color: Colors.white.withValues(alpha: 0.94),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$_diamondBalance',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    context.tr(widget.subtitle),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.82),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Expanded(
+                    child: GridView.builder(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      itemCount: _flowRunnerUnlockableSkins.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: compact ? 0.62 : 0.7,
+                      ),
+                      itemBuilder: (BuildContext context, int index) {
+                        final _FlowRunnerPlayerSkin skin =
+                            _flowRunnerUnlockableSkins[index];
+                        final bool selected = skin == _selectedSkin;
+                        final bool unlocked = _isUnlocked(skin);
+                        final bool canUnlock = _canUnlock(skin);
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => _selectSkin(skin),
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(
+                                alpha: selected ? 0.18 : 0.08,
+                              ),
+                              borderRadius: BorderRadius.circular(18),
+                              boxShadow: <BoxShadow>[
+                                BoxShadow(
+                                  color: widget.accent.withValues(
+                                    alpha: selected ? 0.34 : 0.14,
+                                  ),
+                                  blurRadius: selected ? 18 : 8,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: <Widget>[
+                                Expanded(
+                                  child: Center(
+                                    child: _FlowRunnerPlayer(
+                                      accent: widget.accent,
+                                      pulse: selected,
+                                      motionPhase: 0,
+                                      skin: skin,
+                                      size:
+                                          _previewSizeForSkin(
+                                            skin,
+                                            compact: compact,
+                                          ) *
+                                          0.96,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: 108,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: <Widget>[
+                                      Text(
+                                        context.tr(skin.label),
+                                        textAlign: TextAlign.center,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.titleSmall
+                                            ?.copyWith(
+                                              color: Colors.white.withValues(
+                                                alpha: 0.96,
+                                              ),
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: <Widget>[
+                                          const _FlowRunnerDiamondGlyph(
+                                            size: 10,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            skin.cost == 0
+                                                ? context.tr('Darmowa')
+                                                : context.trf(
+                                                    '{count} diamentów',
+                                                    <String, String>{
+                                                      'count': '${skin.cost}',
+                                                    },
+                                                  ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                                  color: const Color(
+                                                    0xFF8BFFBB,
+                                                  ),
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: unlocked
+                                            ? OutlinedButton(
+                                                onPressed: selected
+                                                    ? null
+                                                    : () => _selectSkin(skin),
+                                                style: OutlinedButton.styleFrom(
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                  minimumSize: const Size(
+                                                    0,
+                                                    34,
+                                                  ),
+                                                  visualDensity:
+                                                      VisualDensity.compact,
+                                                  side: BorderSide(
+                                                    color: selected
+                                                        ? const Color(
+                                                            0xFF7DFFB3,
+                                                          )
+                                                        : Colors.white
+                                                              .withValues(
+                                                                alpha: 0.38,
+                                                              ),
+                                                  ),
+                                                  foregroundColor: Colors.white,
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 6,
+                                                      ),
+                                                ),
+                                                child: Text(
+                                                  selected
+                                                      ? context.tr('Aktywna')
+                                                      : context.tr('Użyj'),
+                                                  style: theme
+                                                      .textTheme
+                                                      .labelMedium
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                      ),
+                                                ),
+                                              )
+                                            : FilledButton(
+                                                onPressed: canUnlock
+                                                    ? () => _unlockSkin(skin)
+                                                    : null,
+                                                style: FilledButton.styleFrom(
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                  minimumSize: const Size(
+                                                    0,
+                                                    34,
+                                                  ),
+                                                  visualDensity:
+                                                      VisualDensity.compact,
+                                                  backgroundColor: canUnlock
+                                                      ? const Color(0xFF31C671)
+                                                      : Colors.white.withValues(
+                                                          alpha: 0.2,
+                                                        ),
+                                                  foregroundColor: const Color(
+                                                    0xFF04130B,
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 6,
+                                                      ),
+                                                ),
+                                                child: Text(
+                                                  canUnlock
+                                                      ? context.tr('Odblokuj')
+                                                      : context.tr(
+                                                          'Za mało diamentów',
+                                                        ),
+                                                  style: theme
+                                                      .textTheme
+                                                      .labelMedium
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                      ),
+                                                ),
+                                              ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _confirmSelection,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: widget.accent.withValues(alpha: 0.94),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Text(
+                        context.tr(widget.ctaLabel),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FlowRunnerMapPickerPage extends StatefulWidget {
+  const _FlowRunnerMapPickerPage({
+    required this.initialMap,
+    required this.diamondBalance,
+    required this.unlockedMaps,
+  });
+
+  final _FlowRunnerArenaMap initialMap;
+  final int diamondBalance;
+  final Set<_FlowRunnerArenaMap> unlockedMaps;
+
+  @override
+  State<_FlowRunnerMapPickerPage> createState() =>
+      _FlowRunnerMapPickerPageState();
+}
+
+class _FlowRunnerMapPickerPageState extends State<_FlowRunnerMapPickerPage> {
+  late _FlowRunnerArenaMap _selectedMap;
+  late int _diamondBalance;
+  final Set<_FlowRunnerArenaMap> _unlockedMaps = <_FlowRunnerArenaMap>{};
+  late final PageController _mapPageController;
+  Timer? _previewTimer;
+  double _previewPhase = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _diamondBalance = widget.diamondBalance;
+    _unlockedMaps.add(_flowRunnerDefaultMap);
+    _unlockedMaps.addAll(
+      widget.unlockedMaps.where(
+        (_FlowRunnerArenaMap map) =>
+            _isFlowRunnerMapAvailable(map) && map != _flowRunnerDefaultMap,
+      ),
+    );
+    _selectedMap =
+        _isFlowRunnerMapAvailable(widget.initialMap) &&
+            _isMapUnlocked(widget.initialMap)
+        ? widget.initialMap
+        : _flowRunnerDefaultMap;
+    _mapPageController = PageController(
+      viewportFraction: 0.86,
+      initialPage: max(0, _flowRunnerAvailableMaps.indexOf(_selectedMap)),
+    );
+    _previewTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _previewPhase += 0.0175;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _previewTimer?.cancel();
+    _mapPageController.dispose();
+    super.dispose();
+  }
+
+  IconData _iconForMap(_FlowRunnerArenaMap map) {
+    return switch (map) {
+      _FlowRunnerArenaMap.classic => Icons.grid_on_rounded,
+      _FlowRunnerArenaMap.neonTunnel => Icons.blur_on_rounded,
+      _FlowRunnerArenaMap.canyon => Icons.landscape_rounded,
+      _FlowRunnerArenaMap.icePeaks => Icons.ac_unit_rounded,
+      _FlowRunnerArenaMap.towerCrane => Icons.construction_rounded,
+      _FlowRunnerArenaMap.volcanoCore => Icons.whatshot_rounded,
+      _FlowRunnerArenaMap.basketArena => Icons.sports_basketball_rounded,
+    };
+  }
+
+  void _selectMap(_FlowRunnerArenaMap map) {
+    if (!_isMapUnlocked(map)) {
+      _unlockMap(map);
+      return;
+    }
+    setState(() {
+      _selectedMap = map;
+    });
+  }
+
+  bool _isMapUnlocked(_FlowRunnerArenaMap map) {
+    return map.cost == 0 || _unlockedMaps.contains(map);
+  }
+
+  bool _canUnlockMap(_FlowRunnerArenaMap map) {
+    return !_isMapUnlocked(map) && _diamondBalance >= map.cost;
+  }
+
+  void _unlockMap(_FlowRunnerArenaMap map) {
+    if (!_canUnlockMap(map)) {
+      return;
+    }
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _diamondBalance -= map.cost;
+      _unlockedMaps.add(map);
+      _selectedMap = map;
+    });
+  }
+
+  void _confirmSelection() {
+    if (!_isMapUnlocked(_selectedMap)) {
+      _unlockMap(_selectedMap);
+      return;
+    }
+    Navigator.of(context).pop(
+      _FlowRunnerMapPickerResult(
+        selectedMap: _selectedMap,
+        diamondBalance: _diamondBalance,
+        unlockedMaps: _unlockedMaps,
+      ),
+    );
+  }
+
+  double _previewY(double speed, double offset) {
+    return (((_previewPhase * speed) + offset) % 1.46) - 0.24;
+  }
+
+  List<_FlowRunnerEntity> _buildPreviewEntities() {
+    final bool neon = _selectedMap == _FlowRunnerArenaMap.neonTunnel;
+    final bool ice = _selectedMap == _FlowRunnerArenaMap.icePeaks;
+    final bool crane = _selectedMap == _FlowRunnerArenaMap.towerCrane;
+    final bool volcano = _selectedMap == _FlowRunnerArenaMap.volcanoCore;
+    final bool basket = _selectedMap == _FlowRunnerArenaMap.basketArena;
+    return <_FlowRunnerEntity>[
+      _FlowRunnerEntity(
+        id: 1,
+        kind: neon
+            ? _FlowRunnerEntityKind.meteor
+            : _FlowRunnerEntityKind.obstacle,
+        trackX: 0.22,
+        y: _previewY(ice ? 0.5 : 0.32, 0.06),
+        speedFactor: 1,
+        obstacleColor: _flowRunnerObstacleColors[2],
+        visualScale: 0.96,
+        visualRotation: ice ? 0.02 : -0.25,
+        isIcicle: ice,
+        isScaffold: crane,
+        isLavaBomb: volcano,
+        isBasketball: basket,
+        glowStrength: 0.0,
+      ),
+      _FlowRunnerEntity(
+        id: 2,
+        kind: _FlowRunnerEntityKind.obstacle,
+        trackX: 0.5,
+        y: _previewY(0.37, 0.38),
+        speedFactor: 1,
+        obstacleColor: _flowRunnerObstacleColors[4],
+        visualScale: 1.04,
+        visualRotation: 0.12,
+        isRebar: crane,
+        isLavaSpire: volcano,
+        isHoop: basket,
+      ),
+      _FlowRunnerEntity(
+        id: 3,
+        kind: _FlowRunnerEntityKind.obstacle,
+        trackX: 0.78,
+        y: _previewY(0.34, 0.72),
+        speedFactor: 1,
+        obstacleColor: _flowRunnerObstacleColors[6],
+        visualScale: 0.92,
+        visualRotation: -0.08,
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final int selectedIndex = max(
+      0,
+      _flowRunnerAvailableMaps.indexOf(_selectedMap),
+    );
+
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          IgnorePointer(
+            child: _FlowRunnerArena(
+              accent: _selectedMap.borderColor,
+              playerTrackX: 0.5,
+              playerPulse: false,
+              selectedMap: _selectedMap,
+              entities: _buildPreviewEntities(),
+              scenePhase: _previewPhase,
+              edgeToEdge: true,
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[
+                  Colors.black.withValues(alpha: 0.56),
+                  const Color(0xFF04080F).withValues(alpha: 0.62),
+                  const Color(0xFF02060B).withValues(alpha: 0.7),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+              child: Column(
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.24),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            const _FlowRunnerDiamondGlyph(size: 12),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$_diamondBalance',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 88),
+                  SizedBox(
+                    height: 206,
+                    child: PageView.builder(
+                      controller: _mapPageController,
+                      itemCount: _flowRunnerAvailableMaps.length,
+                      onPageChanged: (int index) {
+                        if (index < 0 ||
+                            index >= _flowRunnerAvailableMaps.length) {
+                          return;
+                        }
+                        _selectMap(_flowRunnerAvailableMaps[index]);
+                      },
+                      itemBuilder: (BuildContext context, int index) {
+                        final _FlowRunnerArenaMap map =
+                            _flowRunnerAvailableMaps[index];
+                        final bool selected = map == _selectedMap;
+                        final bool unlocked = _isMapUnlocked(map);
+                        final bool canUnlock = _canUnlockMap(map);
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () {
+                              _mapPageController.animateToPage(
+                                index,
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOut,
+                              );
+                              _selectMap(map);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.fromLTRB(
+                                12,
+                                12,
+                                12,
+                                12,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: map.backgroundColors,
+                                ),
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: <BoxShadow>[
+                                  BoxShadow(
+                                    color: map.borderColor.withValues(
+                                      alpha: selected ? 0.52 : 0.28,
+                                    ),
+                                    blurRadius: selected ? 16 : 8,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              foregroundDecoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(18),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: <Color>[
+                                    Colors.black.withValues(
+                                      alpha: selected ? 0.06 : 0.03,
+                                    ),
+                                    Colors.black.withValues(
+                                      alpha: selected ? 0.28 : 0.18,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Row(
+                                    children: <Widget>[
+                                      Container(
+                                        width: 44,
+                                        height: 44,
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.26,
+                                          ),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          _iconForMap(map),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.92,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          context.tr(map.label),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.headlineSmall
+                                              ?.copyWith(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w900,
+                                                shadows: <Shadow>[
+                                                  Shadow(
+                                                    color: Colors.black
+                                                        .withValues(alpha: 0.5),
+                                                    blurRadius: 8,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    context.tr(map.summary),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.9,
+                                      ),
+                                      fontWeight: FontWeight.w700,
+                                      shadows: <Shadow>[
+                                        Shadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.46,
+                                          ),
+                                          blurRadius: 7,
+                                          offset: const Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: <Widget>[
+                                      const _FlowRunnerDiamondGlyph(size: 10),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        map.cost == 0
+                                            ? context.tr('Darmowa')
+                                            : context.trf(
+                                                '{count} diamentów',
+                                                <String, String>{
+                                                  'count': '${map.cost}',
+                                                },
+                                              ),
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                              color: const Color(0xFF8BFFBB),
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                  const Spacer(),
+                                  Align(
+                                    alignment: Alignment.center,
+                                    child: SizedBox(
+                                      width: 170,
+                                      child: unlocked
+                                          ? OutlinedButton(
+                                              onPressed: selected
+                                                  ? null
+                                                  : () => _selectMap(map),
+                                              style: OutlinedButton.styleFrom(
+                                                tapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                                minimumSize: const Size(0, 34),
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                side: BorderSide(
+                                                  color: selected
+                                                      ? const Color(0xFF7DFFB3)
+                                                      : Colors.white.withValues(
+                                                          alpha: 0.38,
+                                                        ),
+                                                ),
+                                                foregroundColor: Colors.white,
+                                              ),
+                                              child: Text(
+                                                selected
+                                                    ? context.tr('Aktywna')
+                                                    : context.tr('Użyj'),
+                                                maxLines: 1,
+                                                textAlign: TextAlign.center,
+                                                style: theme
+                                                    .textTheme
+                                                    .labelMedium
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                    ),
+                                              ),
+                                            )
+                                          : FilledButton(
+                                              onPressed: canUnlock
+                                                  ? () => _unlockMap(map)
+                                                  : null,
+                                              style: FilledButton.styleFrom(
+                                                tapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                                minimumSize: const Size(0, 34),
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                backgroundColor: canUnlock
+                                                    ? const Color(0xFF31C671)
+                                                    : Colors.white.withValues(
+                                                        alpha: 0.2,
+                                                      ),
+                                                foregroundColor: const Color(
+                                                  0xFF04130B,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                canUnlock
+                                                    ? context.tr('Odblokuj')
+                                                    : context.tr(
+                                                        'Za mało diamentów',
+                                                      ),
+                                                maxLines: 1,
+                                                textAlign: TextAlign.center,
+                                                style: theme
+                                                    .textTheme
+                                                    .labelMedium
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                    ),
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List<Widget>.generate(
+                      _flowRunnerAvailableMaps.length,
+                      (int index) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 140),
+                        width: index == selectedIndex ? 16 : 6,
+                        height: 6,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: index == selectedIndex
+                              ? Colors.white.withValues(alpha: 0.88)
+                              : Colors.white.withValues(alpha: 0.32),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _isMapUnlocked(_selectedMap)
+                          ? _confirmSelection
+                          : (_canUnlockMap(_selectedMap)
+                                ? () => _unlockMap(_selectedMap)
+                                : null),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _selectedMap.borderColor.withValues(
+                          alpha: 0.96,
+                        ),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Text(
+                        _isMapUnlocked(_selectedMap)
+                            ? context.tr('Użyj mapy')
+                            : _canUnlockMap(_selectedMap)
+                            ? context.tr('Odblokuj mapę')
+                            : context.tr('Za mało diamentów'),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FlowRunnerDiamondStorePage extends StatefulWidget {
+  const _FlowRunnerDiamondStorePage({required this.initialBalance});
+
+  final int initialBalance;
+
+  @override
+  State<_FlowRunnerDiamondStorePage> createState() =>
+      _FlowRunnerDiamondStorePageState();
+}
+
+class _FlowRunnerDiamondStorePageState
+    extends State<_FlowRunnerDiamondStorePage> {
+  late int _diamondBalance;
+  final Map<int, ProductDetails> _packProducts = <int, ProductDetails>{};
+  bool _isLoadingProducts = true;
+  int? _processingPackageAmount;
+
+  @override
+  void initState() {
+    super.initState();
+    _diamondBalance = widget.initialBalance;
+    _loadStoreProducts();
+  }
+
+  String _formatPln(double value) =>
+      value.toStringAsFixed(2).replaceAll('.', ',');
+
+  Future<void> _loadStoreProducts() async {
+    if (!_supportsGooglePlayPurchases) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoadingProducts = false;
+      });
+      return;
+    }
+
+    final iap = InAppPurchase.instance;
+    final available = await iap.isAvailable();
+    if (!available) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoadingProducts = false;
+      });
+      return;
+    }
+
+    final response = await iap.queryProductDetails(
+      _flowRunnerDiamondPackProductIds,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    final Map<int, ProductDetails> detailsByAmount = <int, ProductDetails>{};
+    for (final product in response.productDetails) {
+      final amount = _diamondPackAmountForProductId(product.id);
+      if (amount != null) {
+        detailsByAmount[amount] = product;
+      }
+    }
+
+    setState(() {
+      _isLoadingProducts = false;
+      _packProducts
+        ..clear()
+        ..addAll(detailsByAmount);
+    });
+  }
+
+  Future<void> _buyPackage(int amount) async {
+    if (_processingPackageAmount != null) {
+      return;
+    }
+    setState(() {
+      _processingPackageAmount = amount;
+    });
+
+    final result = await _startDiamondPackPurchase(amount);
+    if (!mounted) {
+      return;
+    }
+
+    if (result.outcome != _DiamondPackPurchaseOutcome.success) {
+      setState(() {
+        _processingPackageAmount = null;
+      });
+      if (result.outcome != _DiamondPackPurchaseOutcome.canceled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.message ??
+                  context.tr('Nie udało się sfinalizować zakupu.'),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final int purchasedAmount = result.amount ?? amount;
+    final int next = _diamondBalance + purchasedAmount;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_FlowRunnerTrainerState._diamondBalancePrefsKey, next);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _diamondBalance = next;
+      _processingPackageAmount = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final packages = <({int amount, double price})>[
+      (amount: 50, price: 9.99),
+      (amount: 100, price: 19.99),
+      (amount: 500, price: 99.95),
+    ];
+
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              image: const DecorationImage(
+                image: AssetImage(
+                  'assets/backgrounds/flow_runner_spaceship_real.jpg',
+                ),
+                fit: BoxFit.cover,
+                alignment: Alignment.bottomRight,
+                colorFilter: ColorFilter.mode(
+                  Color(0xFF060B14),
+                  BlendMode.multiply,
+                ),
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: <Color>[
+                  Colors.black.withValues(alpha: 0.58),
+                  const Color(0xFF050A14).withValues(alpha: 0.7),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+              child: Column(
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      IconButton(
+                        onPressed: () =>
+                            Navigator.of(context).pop(_diamondBalance),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          context.tr('Diamenty'),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 48),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(
+                          Icons.diamond_rounded,
+                          size: 16,
+                          color: Colors.white.withValues(alpha: 0.94),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$_diamondBalance',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    context.tr('Wybierz pakiet diamentów'),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.84),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: packages.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 12),
+                      itemBuilder: (BuildContext context, int index) {
+                        final pkg = packages[index];
+                        final ProductDetails? storeProduct =
+                            _packProducts[pkg.amount];
+                        final bool purchaseAvailable =
+                            !_isLoadingProducts &&
+                            _processingPackageAmount == null &&
+                            storeProduct != null;
+                        final String priceLabel =
+                            storeProduct?.price ??
+                            '${_formatPln(pkg.price)} PLN';
+                        return Container(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.22),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Row(
+                                children: <Widget>[
+                                  Container(
+                                    width: 74,
+                                    height: 74,
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: <Color>[
+                                          Color(0xFF5C4A2D),
+                                          Color(0xFF2E2415),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.22,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: <Widget>[
+                                        const _FlowRunnerDiamondGlyph(size: 20),
+                                        Positioned(
+                                          right: 12,
+                                          top: 12,
+                                          child: const _FlowRunnerDiamondGlyph(
+                                            size: 12,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          left: 12,
+                                          bottom: 12,
+                                          child: const _FlowRunnerDiamondGlyph(
+                                            size: 10,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        Text(
+                                          context
+                                              .tr('Pakiet {amount} diamentów')
+                                              .replaceFirst(
+                                                '{amount}',
+                                                '${pkg.amount}',
+                                              ),
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          priceLabel,
+                                          style: theme.textTheme.titleLarge
+                                              ?.copyWith(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  FilledButton(
+                                    onPressed: purchaseAvailable
+                                        ? () => _buyPackage(pkg.amount)
+                                        : null,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFF33B877),
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    child: Text(
+                                      _processingPackageAmount == pkg.amount
+                                          ? '...'
+                                          : context.tr('Kup'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _FlowRunnerTrackPainter extends CustomPainter {
   const _FlowRunnerTrackPainter({
-    required this.accent,
+    required this.selectedMap,
     required this.phase,
     required this.showHitFlash,
   });
 
-  final Color accent;
+  final _FlowRunnerArenaMap selectedMap;
   final double phase;
   final bool showHitFlash;
 
   @override
   void paint(Canvas canvas, Size size) {
     final Paint lanePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.12)
+      ..color = selectedMap.laneColor
       ..strokeWidth = 1.4
       ..style = PaintingStyle.stroke;
     final Paint stripePaint = Paint()
-      ..color = accent.withValues(alpha: 0.22)
+      ..color = selectedMap.stripeColor
       ..style = PaintingStyle.fill;
 
-    final List<double> laneXs = <double>[
-      size.width * 0.14,
-      size.width * 0.36,
-      size.width * 0.64,
-      size.width * 0.86,
-    ];
-    for (final double laneX in laneXs) {
-      canvas.drawLine(Offset(laneX, 0), Offset(laneX, size.height), lanePaint);
+    if (selectedMap == _FlowRunnerArenaMap.neonTunnel) {
+      _paintNeonSpaceBackdrop(canvas, size);
     }
 
-    for (int index = 0; index < 9; index += 1) {
-      final double progress = ((index / 9) + (phase * 0.42)) % 1;
-      final double y = size.height * progress;
-      final double width = size.width * (0.18 + (progress * 0.62));
-      final double left = (size.width - width) / 2;
-      final RRect stripe = RRect.fromRectAndRadius(
-        Rect.fromLTWH(left, y, width, 3),
-        const Radius.circular(999),
-      );
-      canvas.drawRRect(stripe, stripePaint);
+    if (selectedMap == _FlowRunnerArenaMap.icePeaks) {
+      _paintIcePeaksBackdrop(canvas, size);
+    }
+    if (selectedMap == _FlowRunnerArenaMap.towerCrane) {
+      _paintTowerCraneBackdrop(canvas, size);
+    }
+    if (selectedMap == _FlowRunnerArenaMap.volcanoCore) {
+      _paintVolcanoBackdrop(canvas, size);
+    }
+    if (selectedMap == _FlowRunnerArenaMap.basketArena) {
+      _paintBasketArenaBackdrop(canvas, size);
+    }
+
+    if (selectedMap != _FlowRunnerArenaMap.neonTunnel &&
+        selectedMap != _FlowRunnerArenaMap.icePeaks &&
+        selectedMap != _FlowRunnerArenaMap.towerCrane &&
+        selectedMap != _FlowRunnerArenaMap.volcanoCore &&
+        selectedMap != _FlowRunnerArenaMap.basketArena) {
+      final List<double> laneXs = <double>[
+        size.width * 0.14,
+        size.width * 0.36,
+        size.width * 0.64,
+        size.width * 0.86,
+      ];
+      for (final double laneX in laneXs) {
+        canvas.drawLine(
+          Offset(laneX, 0),
+          Offset(laneX, size.height),
+          lanePaint,
+        );
+      }
+
+      for (int index = 0; index < 9; index += 1) {
+        final double progress = ((index / 9) + (phase * 0.42)) % 1;
+        final double y = size.height * progress;
+        final double width = size.width * (0.18 + (progress * 0.62));
+        final double left = (size.width - width) / 2;
+        final RRect stripe = RRect.fromRectAndRadius(
+          Rect.fromLTWH(left, y, width, 3),
+          const Radius.circular(999),
+        );
+        canvas.drawRRect(stripe, stripePaint);
+      }
     }
 
     if (showHitFlash) {
@@ -24441,9 +36446,348 @@ class _FlowRunnerTrackPainter extends CustomPainter {
     }
   }
 
+  void _paintNeonSpaceBackdrop(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xFF04070F).withValues(alpha: 0.34),
+    );
+
+    final Paint overlayPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Color(0x3A1D2E52),
+          Color(0x2420324C),
+          Color(0x14101A2E),
+        ],
+        stops: <double>[0, 0.52, 1],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, overlayPaint);
+
+    final Paint starPaint = Paint()..style = PaintingStyle.fill;
+    for (int index = 0; index < 24; index += 1) {
+      final double fx = ((index * 37) % 100) / 100;
+      final double fy = ((index * 61) % 100) / 100;
+      final double twinkle =
+          0.24 + (0.2 * ((sin((phase * 2.4) + index) + 1) / 2));
+      starPaint.color = Colors.white.withValues(alpha: twinkle);
+      canvas.drawCircle(
+        Offset(size.width * fx, size.height * (0.06 + (fy * 0.58))),
+        0.8 + ((index % 3) * 0.35),
+        starPaint,
+      );
+    }
+  }
+
+  void _paintIcePeaksBackdrop(Canvas canvas, Size size) {
+    final Paint mattePaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Color(0x66233447),
+          Color(0x66304761),
+          Color(0x663C5673),
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, mattePaint);
+
+    final Path farMountains = Path()
+      ..moveTo(0, size.height * 0.5)
+      ..lineTo(size.width * 0.18, size.height * 0.34)
+      ..lineTo(size.width * 0.36, size.height * 0.48)
+      ..lineTo(size.width * 0.54, size.height * 0.3)
+      ..lineTo(size.width * 0.74, size.height * 0.5)
+      ..lineTo(size.width * 0.9, size.height * 0.36)
+      ..lineTo(size.width, size.height * 0.46)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(
+      farMountains,
+      Paint()..color = const Color(0xFF57718D).withValues(alpha: 0.48),
+    );
+
+    final Path nearMountains = Path()
+      ..moveTo(0, size.height * 0.64)
+      ..lineTo(size.width * 0.14, size.height * 0.42)
+      ..lineTo(size.width * 0.28, size.height * 0.58)
+      ..lineTo(size.width * 0.48, size.height * 0.36)
+      ..lineTo(size.width * 0.68, size.height * 0.6)
+      ..lineTo(size.width * 0.86, size.height * 0.44)
+      ..lineTo(size.width, size.height * 0.62)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(
+      nearMountains,
+      Paint()..color = const Color(0xFF89A2BA).withValues(alpha: 0.44),
+    );
+
+    final Paint snowCaps = Paint()
+      ..color = Colors.white.withValues(alpha: 0.62)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(
+      Path()
+        ..moveTo(size.width * 0.48, size.height * 0.36)
+        ..lineTo(size.width * 0.44, size.height * 0.43)
+        ..lineTo(size.width * 0.53, size.height * 0.44)
+        ..close(),
+      snowCaps,
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(size.width * 0.14, size.height * 0.42)
+        ..lineTo(size.width * 0.1, size.height * 0.49)
+        ..lineTo(size.width * 0.18, size.height * 0.5)
+        ..close(),
+      snowCaps,
+    );
+  }
+
+  void _paintTowerCraneBackdrop(Canvas canvas, Size size) {
+    final Paint mattePaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Color(0x66302C28),
+          Color(0x663D3730),
+          Color(0x6651473D),
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, mattePaint);
+
+    final Paint mastPaint = Paint()
+      ..color = const Color(0xFF8B7E6D).withValues(alpha: 0.66);
+    final Rect mast = Rect.fromLTWH(
+      size.width * 0.46,
+      size.height * 0.1,
+      size.width * 0.08,
+      size.height * 0.86,
+    );
+    canvas.drawRect(mast, mastPaint);
+
+    final Paint ladderPaint = Paint()
+      ..color = const Color(0xFFB8A78D).withValues(alpha: 0.74)
+      ..strokeWidth = 2;
+    for (int i = 0; i < 22; i += 1) {
+      final double y = mast.top + (i * (mast.height / 22));
+      canvas.drawLine(
+        Offset(mast.left + 6, y),
+        Offset(mast.right - 6, y),
+        ladderPaint,
+      );
+    }
+
+    final Paint cabinPaint = Paint()
+      ..color = const Color(0xFFCDAA6F).withValues(alpha: 0.82);
+    final RRect cabin = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        size.width * 0.42,
+        size.height * 0.06,
+        size.width * 0.16,
+        size.height * 0.08,
+      ),
+      const Radius.circular(6),
+    );
+    canvas.drawRRect(cabin, cabinPaint);
+
+    final Paint boomPaint = Paint()
+      ..color = const Color(0xFFB88A42).withValues(alpha: 0.76);
+    canvas.drawRect(
+      Rect.fromLTWH(
+        size.width * 0.5,
+        size.height * 0.09,
+        size.width * 0.4,
+        size.height * 0.02,
+      ),
+      boomPaint,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(
+        size.width * 0.22,
+        size.height * 0.09,
+        size.width * 0.28,
+        size.height * 0.02,
+      ),
+      boomPaint,
+    );
+
+    final Paint cablePaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.5)
+      ..strokeWidth = 1.4;
+    canvas.drawLine(
+      Offset(size.width * 0.82, size.height * 0.11),
+      Offset(size.width * 0.82, size.height * 0.36),
+      cablePaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          size.width * 0.79,
+          size.height * 0.34,
+          size.width * 0.06,
+          size.height * 0.05,
+        ),
+        const Radius.circular(4),
+      ),
+      Paint()..color = const Color(0xFF706252).withValues(alpha: 0.82),
+    );
+  }
+
+  void _paintVolcanoBackdrop(Canvas canvas, Size size) {
+    final Paint haze = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Color(0x4D3B1008),
+          Color(0x6B55180D),
+          Color(0x8A220D09),
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, haze);
+
+    final Path volcano = Path()
+      ..moveTo(size.width * 0.18, size.height)
+      ..lineTo(size.width * 0.38, size.height * 0.46)
+      ..lineTo(size.width * 0.62, size.height * 0.46)
+      ..lineTo(size.width * 0.82, size.height)
+      ..close();
+    canvas.drawPath(
+      volcano,
+      Paint()..color = const Color(0xFF2A120C).withValues(alpha: 0.86),
+    );
+
+    final Path crater = Path()
+      ..addOval(
+        Rect.fromCenter(
+          center: Offset(size.width * 0.5, size.height * 0.44),
+          width: size.width * 0.2,
+          height: size.height * 0.06,
+        ),
+      );
+    canvas.drawPath(
+      crater,
+      Paint()..color = const Color(0xFFFF6D2A).withValues(alpha: 0.82),
+    );
+
+    final Paint lavaPaint = Paint()
+      ..shader =
+          const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[
+              Color(0xFFFFA44A),
+              Color(0xFFFF5A23),
+              Color(0xFFB12310),
+            ],
+          ).createShader(
+            Rect.fromLTWH(
+              size.width * 0.44,
+              size.height * 0.46,
+              size.width * 0.12,
+              size.height * 0.48,
+            ),
+          );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          size.width * 0.47,
+          size.height * 0.46,
+          size.width * 0.06,
+          size.height * 0.52,
+        ),
+        const Radius.circular(999),
+      ),
+      lavaPaint,
+    );
+
+    final Paint emberPaint = Paint()..style = PaintingStyle.fill;
+    for (int i = 0; i < 14; i += 1) {
+      final double fx = ((i * 23) % 100) / 100;
+      final double fy = ((i * 37) % 100) / 100;
+      final double drift = ((sin((phase * 2.8) + (i * 0.9)) + 1) / 2) * 0.04;
+      emberPaint.color = const Color(
+        0xFFFFA145,
+      ).withValues(alpha: 0.2 + (0.25 * ((sin((phase * 3.4) + i) + 1) / 2)));
+      canvas.drawCircle(
+        Offset(
+          size.width * (0.14 + (fx * 0.72)),
+          size.height * (0.08 + fy * 0.4 - drift),
+        ),
+        1.2 + ((i % 3) * 0.6),
+        emberPaint,
+      );
+    }
+  }
+
+  void _paintBasketArenaBackdrop(Canvas canvas, Size size) {
+    final Paint courtTint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Color(0x4DAA6F2D),
+          Color(0x66B87935),
+          Color(0x8A6E3E1C),
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, courtTint);
+
+    final Paint linePaint = Paint()
+      ..color = const Color(0xFFFDE0B8).withValues(alpha: 0.62)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+
+    canvas.drawLine(
+      Offset(size.width * 0.5, 0),
+      Offset(size.width * 0.5, size.height),
+      linePaint,
+    );
+
+    canvas.drawCircle(
+      Offset(size.width * 0.5, size.height * 0.5),
+      size.width * 0.11,
+      linePaint,
+    );
+
+    canvas.drawArc(
+      Rect.fromCircle(
+        center: Offset(size.width * 0.5, size.height * 0.2),
+        radius: size.width * 0.18,
+      ),
+      pi * 0.06,
+      pi * 0.88,
+      false,
+      linePaint,
+    );
+
+    canvas.drawArc(
+      Rect.fromCircle(
+        center: Offset(size.width * 0.5, size.height * 0.8),
+        radius: size.width * 0.18,
+      ),
+      pi * 1.06,
+      pi * 0.88,
+      false,
+      linePaint,
+    );
+
+    final Paint gloss = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: <Color>[Color(0x24FFFFFF), Color(0x05FFFFFF)],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, gloss);
+  }
+
   @override
   bool shouldRepaint(covariant _FlowRunnerTrackPainter oldDelegate) {
-    return oldDelegate.accent != accent ||
+    return oldDelegate.selectedMap != selectedMap ||
         oldDelegate.phase != phase ||
         oldDelegate.showHitFlash != showHitFlash;
   }
@@ -24519,8 +36863,8 @@ class _FocusDotTrainerState extends State<FocusDotTrainer> {
       children: <Widget>[
         Container(
           width: double.infinity,
-          height: 170,
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+          height: 214,
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -24538,12 +36882,12 @@ class _FocusDotTrainerState extends State<FocusDotTrainer> {
             children: <Widget>[
               Center(
                 child: Text(
-                  'Tryby gry',
+                  context.tr('Tryby gry'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.labelLarge?.copyWith(
-                    color: const Color(0xFF63717C),
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.4,
+                    color: const Color(0xFF2E3E4E),
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
                   ),
                 ),
               ),
@@ -24558,7 +36902,7 @@ class _FocusDotTrainerState extends State<FocusDotTrainer> {
                     return Container(
                       key: ValueKey<String>('focus-mode-${game.kind.name}'),
                       width: double.infinity,
-                      padding: const EdgeInsets.all(18),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.82),
                         borderRadius: BorderRadius.circular(22),
@@ -24571,27 +36915,35 @@ class _FocusDotTrainerState extends State<FocusDotTrainer> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: <Widget>[
                           Text(
-                            game.title,
+                            context.tr(game.title),
                             textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleLarge?.copyWith(
-                              color: const Color(0xFF16212B),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Po co: ${game.focusLabel}',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: const Color(0xFF24303A),
+                              color: const Color(0xFF121C26),
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            game.difficultyLabel,
+                            '${context.tr('Po co')}: ${context.tr(game.focusLabel)}',
                             textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: const Color(0xFF63717C),
-                              fontWeight: FontWeight.w700,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: const Color(0xFF1F2B36),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            context.tr(game.difficultyLabel),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: const Color(0xFF485A6B),
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ],
@@ -24671,15 +37023,22 @@ class _FocusDurationSelector extends StatelessWidget {
       children: <int>[2, 5, 10].map((int minutes) {
         final bool selected = selectedMinutes == minutes;
         return ChoiceChip(
-          label: Text('$minutes min'),
+          label: Text(
+            context.trf('{minutes} min', <String, String>{
+              'minutes': '$minutes',
+            }),
+          ),
           selected: selected,
           onSelected: (_) => onSelected(minutes),
-          selectedColor: accent.withValues(alpha: 0.2),
+          backgroundColor: const Color(0xFF1A2632),
+          selectedColor: accent.withValues(alpha: 0.28),
           labelStyle: TextStyle(
-            color: selected ? accent : const Color(0xFF24303A),
+            color: Colors.white,
             fontWeight: FontWeight.w800,
           ),
-          side: BorderSide(color: selected ? accent : const Color(0xFFCFD6DC)),
+          side: BorderSide(
+            color: selected ? accent : Colors.white.withValues(alpha: 0.38),
+          ),
         );
       }).toList(),
     );
@@ -25138,7 +37497,7 @@ class _FocusAnchorTrainerState extends State<_FocusAnchorTrainer> {
           children: <Widget>[
             Expanded(
               child: StatStrip(
-                label: 'Czas',
+                label: context.tr('Czas'),
                 value: '$_selectedMinutes min',
                 tint: widget.accent,
               ),
@@ -25146,8 +37505,10 @@ class _FocusAnchorTrainerState extends State<_FocusAnchorTrainer> {
             const SizedBox(width: 10),
             Expanded(
               child: StatStrip(
-                label: 'Cel',
-                value: _finished ? 'Sesja zrobiona' : 'Spokój centrum',
+                label: context.tr('Cel'),
+                value: context.tr(
+                  _finished ? 'Sesja zrobiona' : 'Spokój centrum',
+                ),
                 tint: widget.accent,
               ),
             ),
@@ -25185,7 +37546,9 @@ class _FocusAnchorTrainerState extends State<_FocusAnchorTrainer> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Text(
-                      'Patrz w punkt. Jeśli myśli odpłyną, wróć do środka bez oceniania.',
+                      context.tr(
+                        'Patrz w punkt. Jeśli myśli odpłyną, wróć do środka bez oceniania.',
+                      ),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: selectedColor.foregroundColor.withValues(
@@ -25202,7 +37565,7 @@ class _FocusAnchorTrainerState extends State<_FocusAnchorTrainer> {
         const SizedBox(height: 18),
         Center(
           child: Text(
-            'Wybierz wygląd punktu',
+            context.tr('Wybierz wygląd punktu'),
             textAlign: TextAlign.center,
             style: theme.textTheme.titleMedium?.copyWith(
               color: const Color(0xFF16212B),
@@ -25288,7 +37651,7 @@ class _FocusAnchorTrainerState extends State<_FocusAnchorTrainer> {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            definition.label,
+                            context.tr(definition.label),
                             textAlign: TextAlign.center,
                             style: theme.textTheme.titleSmall?.copyWith(
                               color: const Color(0xFF16212B),
@@ -25297,7 +37660,7 @@ class _FocusAnchorTrainerState extends State<_FocusAnchorTrainer> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            definition.description,
+                            context.tr(definition.description),
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: const Color(0xFF4A5761),
@@ -25342,7 +37705,7 @@ class _FocusAnchorTrainerState extends State<_FocusAnchorTrainer> {
             constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
             child: FilledButton(
               onPressed: _start,
-              child: const Text('Start sesji'),
+              child: Text(context.tr('Start sesji')),
             ),
           ),
         ),
@@ -25411,7 +37774,7 @@ class _SmoothPursuitTrainerState extends State<_SmoothPursuitTrainer> {
           children: <Widget>[
             Expanded(
               child: StatStrip(
-                label: 'Czas',
+                label: context.tr('Czas'),
                 value: '$_selectedMinutes min',
                 tint: widget.accent,
               ),
@@ -25419,8 +37782,8 @@ class _SmoothPursuitTrainerState extends State<_SmoothPursuitTrainer> {
             const SizedBox(width: 10),
             Expanded(
               child: StatStrip(
-                label: 'Tor',
-                value: _finished ? 'Sesja zrobiona' : 'Mix 3',
+                label: context.tr('Tor'),
+                value: context.tr(_finished ? 'Sesja zrobiona' : 'Mix 3'),
                 tint: widget.accent,
               ),
             ),
@@ -25448,7 +37811,7 @@ class _SmoothPursuitTrainerState extends State<_SmoothPursuitTrainer> {
             constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
             child: FilledButton(
               onPressed: _start,
-              child: const Text('Start sesji'),
+              child: Text(context.tr('Start sesji')),
             ),
           ),
         ),
@@ -25677,7 +38040,7 @@ class _PeripheralFocusTrainerState extends State<_PeripheralFocusTrainer> {
           children: <Widget>[
             Expanded(
               child: StatStrip(
-                label: 'Czas',
+                label: context.tr('Czas'),
                 value: '$_selectedMinutes min',
                 tint: widget.accent,
               ),
@@ -25685,8 +38048,10 @@ class _PeripheralFocusTrainerState extends State<_PeripheralFocusTrainer> {
             const SizedBox(width: 10),
             Expanded(
               child: StatStrip(
-                label: 'Reguła',
-                value: _finished ? 'Sesja zrobiona' : 'Tap tylko na jasny',
+                label: context.tr('Reguła'),
+                value: context.tr(
+                  _finished ? 'Sesja zrobiona' : 'Tap tylko na jasny',
+                ),
                 tint: widget.accent,
               ),
             ),
@@ -25711,9 +38076,11 @@ class _PeripheralFocusTrainerState extends State<_PeripheralFocusTrainer> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Trzymaj wzrok w środku. Tapnij tylko wtedy, gdy po boku mignie jasny sygnał i od razu wracaj uwagą do centrum.',
+          context.tr(
+            'Trzymaj wzrok w środku. Tapnij tylko wtedy, gdy po boku mignie jasny sygnał i od razu wracaj uwagą do centrum.',
+          ),
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: const Color(0xFF4A5761),
+            color: Colors.white,
             height: 1.45,
           ),
         ),
@@ -25723,7 +38090,7 @@ class _PeripheralFocusTrainerState extends State<_PeripheralFocusTrainer> {
             constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
             child: FilledButton(
               onPressed: _start,
-              child: const Text('Start sesji'),
+              child: Text(context.tr('Start sesji')),
             ),
           ),
         ),
@@ -26611,7 +38978,7 @@ class _PeripheralFocusSessionPageState
   int _hits = 0;
   int _misses = 0;
   int _errors = 0;
-  String _status = 'Trzymaj wzrok w środku.';
+  String _status = _localizedText('Trzymaj wzrok w środku.', _activeUiLanguage);
 
   @override
   void initState() {
@@ -26674,7 +39041,7 @@ class _PeripheralFocusSessionPageState
       _hits = 0;
       _misses = 0;
       _errors = 0;
-      _status = 'Trzymaj wzrok w środku.';
+      _status = context.tr('Trzymaj wzrok w środku.');
       _startCountdownValue = _sessionStartCountdownSeconds;
     });
 
@@ -26723,7 +39090,7 @@ class _PeripheralFocusSessionPageState
       _startCountdownValue = null;
       _running = true;
       _finished = false;
-      _status = 'Tapnij tylko przy jasnym błysku.';
+      _status = context.tr('Tapnij tylko przy jasnym błysku.');
     });
 
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
@@ -26768,8 +39135,8 @@ class _PeripheralFocusSessionPageState
       _activeTarget = target;
       _canRespond = true;
       _status = target
-          ? 'Jasny błysk. Tapnij.'
-          : 'Wabik. Ignoruj i trzymaj środek.';
+          ? context.tr('Jasny błysk. Tapnij.')
+          : context.tr('Wabik. Ignoruj i trzymaj środek.');
     });
 
     _stimulusIndex += 1;
@@ -26787,9 +39154,9 @@ class _PeripheralFocusSessionPageState
     setState(() {
       if (missedTarget) {
         _misses += 1;
-        _status = 'Za późno. Wróć do środka.';
+        _status = context.tr('Za późno. Wróć do środka.');
       } else {
-        _status = 'Wróć uwagą do centrum.';
+        _status = context.tr('Wróć uwagą do centrum.');
       }
       _activeSlot = null;
       _canRespond = false;
@@ -26810,7 +39177,7 @@ class _PeripheralFocusSessionPageState
       setState(() {
         _score += 1;
         _hits += 1;
-        _status = 'Dobrze. Wracaj do centrum.';
+        _status = context.tr('Dobrze. Wracaj do centrum.');
         _activeSlot = null;
         _canRespond = false;
       });
@@ -26819,7 +39186,7 @@ class _PeripheralFocusSessionPageState
       setState(() {
         _score = max(0, _score - 1);
         _errors += 1;
-        _status = 'To był wabik. Trzymaj środek.';
+        _status = context.tr('To był wabik. Trzymaj środek.');
         _activeSlot = null;
         _canRespond = false;
       });
@@ -26924,7 +39291,9 @@ class _PeripheralFocusSessionPageState
                           borderRadius: BorderRadius.circular(18),
                         ),
                         child: Text(
-                          'Punkty $_score',
+                          context.trf('Punkty {score}', <String, String>{
+                            'score': '$_score',
+                          }),
                           style: theme.textTheme.labelLarge?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
@@ -26958,7 +39327,7 @@ class _PeripheralFocusSessionPageState
                               mainAxisSize: MainAxisSize.min,
                               children: <Widget>[
                                 Text(
-                                  'Koniec',
+                                  context.tr('Koniec'),
                                   style: theme.textTheme.headlineMedium
                                       ?.copyWith(
                                         color: Colors.white,
@@ -26968,7 +39337,15 @@ class _PeripheralFocusSessionPageState
                                 ),
                                 const SizedBox(height: 12),
                                 Text(
-                                  'Punkty $_score • trafione $_hits • pominięte $_misses • błędy $_errors',
+                                  context.trf(
+                                    'Punkty {score} • trafione {hits} • pominięte {misses} • błędy {errors}',
+                                    <String, String>{
+                                      'score': '$_score',
+                                      'hits': '$_hits',
+                                      'misses': '$_misses',
+                                      'errors': '$_errors',
+                                    },
+                                  ),
                                   textAlign: TextAlign.center,
                                   style: theme.textTheme.bodyLarge?.copyWith(
                                     color: Colors.white.withValues(alpha: 0.86),
@@ -27005,7 +39382,9 @@ class _PeripheralFocusSessionPageState
                               const SizedBox(height: 18),
                               Text(
                                 _isCountingDown
-                                    ? 'Ustaw wzrok w centrum. Za chwilę zaczną wpadać bodźce z boków.'
+                                    ? context.tr(
+                                        'Ustaw wzrok w centrum. Za chwilę zaczną wpadać bodźce z boków.',
+                                      )
                                     : _status,
                                 textAlign: TextAlign.center,
                                 style: theme.textTheme.bodyLarge?.copyWith(
@@ -27219,6 +39598,116 @@ const List<String> _memoryWordPool = <String>[
   'donica',
 ];
 
+const List<String> _memoryWordPoolUkrainian = <String>[
+  'ліс',
+  'ключ',
+  'чашка',
+  'міст',
+  "камінь",
+  'сік',
+  'вікно',
+  'годинник',
+  'велосипед',
+  'свічка',
+  'вітер',
+  'лампа',
+  "полум'я",
+  'ваза',
+  'сад',
+  'нотатник',
+  'рюкзак',
+  'озеро',
+  'драбина',
+  'шнур',
+  'дзеркало',
+  'крісло',
+  'компас',
+  'хмара',
+  'зірка',
+  'стежка',
+  'парасоля',
+  'монета',
+  'валіза',
+  'миска',
+  'стілець',
+  'шухляда',
+  'кактус',
+  'торба',
+  'мапа',
+  'тунель',
+  'чайка',
+  'мушля',
+  'ліхтар',
+  'пісок',
+  'молоток',
+  'голка',
+  'рамка',
+  'картина',
+  'гітара',
+  'радіо',
+  'замок',
+  'термос',
+  'дзвінок',
+  'брама',
+  'лавка',
+  'тарілка',
+  'виделка',
+  'ложка',
+  'чайник',
+  'планета',
+  'ракета',
+  'печера',
+  'корона',
+  'якір',
+  'вагон',
+  'трамвай',
+  'кіоск',
+  'лимон',
+  'груша',
+  'слива',
+  'малина',
+  'ягода',
+  'морква',
+  'огірок',
+  'перець',
+  'цибуля',
+  'мята',
+  'лаванда',
+  'буря',
+  'веселка',
+  'сніг',
+  'дощ',
+  'блискавка',
+  'острів',
+  'затока',
+  'долина',
+  'скеля',
+  'пустеля',
+  'дюна',
+  'мох',
+  'лист',
+  'килим',
+  'штора',
+  'полиця',
+  'тека',
+  'конверт',
+  'магніт',
+  'вішак',
+  'щітка',
+  'гребінець',
+  'мило',
+  'рушник',
+  'кошик',
+  'вазон',
+];
+
+List<String> _memoryWordPoolForLanguage(_AppLanguage language) {
+  return switch (language) {
+    _AppLanguage.ukrainian => _memoryWordPoolUkrainian,
+    _ => _memoryWordPool,
+  };
+}
+
 String _memoryPluralLabel(
   int count, {
   required String singular,
@@ -27242,7 +39731,18 @@ String _digitCountLabel(int count) {
 }
 
 String _memoryElementCountLabel(int count) {
-  return '$count ${_memoryPluralLabel(count, singular: 'element', paucal: 'elementy', plural: 'elementów')}';
+  return switch (_activeUiLanguage) {
+    _AppLanguage.english =>
+      '$count ${count == 1 ? 'element' : 'elements'}',
+    _AppLanguage.german =>
+      '$count ${count == 1 ? 'Element' : 'Elemente'}',
+    _AppLanguage.ukrainian =>
+      '$count ${_memoryPluralLabel(count, singular: 'елемент', paucal: 'елементи', plural: 'елементів')}',
+    _AppLanguage.russian =>
+      '$count ${_memoryPluralLabel(count, singular: 'элемент', paucal: 'элемента', plural: 'элементов')}',
+    _AppLanguage.polish =>
+      '$count ${_memoryPluralLabel(count, singular: 'element', paucal: 'elementy', plural: 'elementów')}',
+  };
 }
 
 String _wordCountLabel(int count) {
@@ -27325,7 +39825,10 @@ class _MemoryGameSelectorCardState extends State<_MemoryGameSelectorCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const SectionHeader(eyebrow: 'Gry', title: 'Tryby gry'),
+          SectionHeader(
+            eyebrow: context.tr('Gry'),
+            title: context.tr('Tryby gry'),
+          ),
           const SizedBox(height: 18),
           Container(
             width: double.infinity,
@@ -27374,7 +39877,7 @@ class _MemoryGameSelectorCardState extends State<_MemoryGameSelectorCard> {
                           ),
                           child: Center(
                             child: Text(
-                              game.title,
+                              context.tr(game.title),
                               textAlign: TextAlign.center,
                               style: theme.textTheme.titleLarge?.copyWith(
                                 color: palette.primaryText,
@@ -27535,13 +40038,120 @@ class _MemoryStatsRow extends StatelessWidget {
     return Row(
       children: <Widget>[
         Expanded(
-          child: StatStrip(label: 'Punkty', value: points, tint: accent),
+          child: StatStrip(
+            label: context.tr('Punkty'),
+            value: points,
+            tint: accent,
+          ),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: StatStrip(label: 'Lvl', value: level, tint: accent),
+          child: StatStrip(
+            label: context.tr('Lvl'),
+            value: level,
+            tint: accent,
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _MemoryChainStatsRow extends StatelessWidget {
+  const _MemoryChainStatsRow({
+    required this.accent,
+    required this.points,
+    required this.level,
+  });
+
+  final Color accent;
+  final String points;
+  final String level;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: _MemoryChainStatCard(
+            label: context.tr('Punkty'),
+            value: points,
+            accent: accent,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _MemoryChainStatCard(
+            label: context.tr('Lvl'),
+            value: level,
+            accent: accent,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MemoryChainStatCard extends StatelessWidget {
+  const _MemoryChainStatCard({
+    required this.label,
+    required this.value,
+    required this.accent,
+  });
+
+  final String label;
+  final String value;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 92),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF11203A).withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: accent.withValues(alpha: 0.22)),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                label.toUpperCase(),
+                maxLines: 1,
+                softWrap: false,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2.0,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              color: const Color(0xFFEAF1FF),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -27654,6 +40264,7 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
   bool _lastAnswerCorrect = false;
   String _currentDigits = '';
   String _status = 'Naciśnij Start sesji i złap kod cyfr.';
+  bool _didLocalizeInitialStatus = false;
 
   bool get _isCountingDown => _countdownValue != null;
   int get _requiredSuccesses => _digitCount >= 5 ? 3 : 2;
@@ -27664,38 +40275,55 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
     if (value == null) {
       return '';
     }
-    return value == 0 ? 'Start' : '$value';
+    return value == 0 ? context.tr('Start') : '$value';
   }
 
   String _withMistakeStatus(String message) {
     if (_mistakes <= 0) {
       return message;
     }
-    return '$message Błędy $_mistakes/2.';
+    return context.trf('{message} Błędy {mistakes}/2.', <String, String>{
+      'message': message,
+      'mistakes': '$_mistakes',
+    });
   }
 
   String get _phaseHint {
     if (_finished) {
       return widget.autoExitOnFinish
-          ? 'Sesja zakończona po dwóch błędach. Za moment wrócisz do wyboru gry.'
-          : 'Sesja zakończona po dwóch błędach. Możesz uruchomić ją ponownie.';
+          ? context.tr(
+              'Sesja zakończona po dwóch błędach. Za moment wrócisz do wyboru gry.',
+            )
+          : context.tr(
+              'Sesja zakończona po dwóch błędach. Możesz uruchomić ją ponownie.',
+            );
     }
     if (_isCountingDown) {
-      return 'Najpierw zobaczysz kod, potem cyfry zaczną miękko znikać i trzeba będzie wpisać je z pamięci.';
+      return context.tr(
+        'Najpierw zobaczysz kod, potem cyfry zaczną miękko znikać i trzeba będzie wpisać je z pamięci.',
+      );
     }
     if (_showingDigits) {
-      return 'Patrz spokojnie na cały ciąg. Nie próbuj go powtarzać na głos.';
+      return context.tr(
+        'Patrz spokojnie na cały ciąg. Nie próbuj go powtarzać na głos.',
+      );
     }
     if (_awaitingAnswer) {
-      return 'Wpisz dokładnie ten sam układ cyfr. Druga pomyłka kończy sesję.';
+      return context.tr(
+        'Wpisz dokładnie ten sam układ cyfr. Druga pomyłka kończy sesję.',
+      );
     }
     if (_roundResolved && _lastAnswerCorrect) {
-      return 'Dobra odpowiedź buduje serię. Gdy zamkniesz serię, długość kodu wzrośnie.';
+      return context.tr(
+        'Dobra odpowiedź buduje serię. Gdy zamkniesz serię, długość kodu wzrośnie.',
+      );
     }
     if (_roundResolved) {
-      return 'Jedna pomyłka jeszcze zostawia ci ruch. Druga zamyka sesję.';
+      return context.tr(
+        'Jedna pomyłka jeszcze zostawia ci ruch. Druga zamyka sesję.',
+      );
     }
-    return 'Zaczynasz od 3 cyfr i możesz dojść aż do 10.';
+    return context.tr('Zaczynasz od 3 cyfr i możesz dojść aż do 10.');
   }
 
   @override
@@ -27708,6 +40336,16 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
         }
       });
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didLocalizeInitialStatus) {
+      return;
+    }
+    _didLocalizeInitialStatus = true;
+    _status = context.tr('Naciśnij Start sesji i złap kod cyfr.');
   }
 
   void _cancelRoundTimers() {
@@ -27741,7 +40379,7 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
       _roundResolved = false;
       _lastAnswerCorrect = false;
       _currentDigits = '';
-      _status = 'Gra startuje. Złap kod.';
+      _status = context.tr('Gra startuje. Złap kod.');
     });
 
     HapticFeedback.selectionClick();
@@ -27801,7 +40439,9 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
       _awaitingAnswer = false;
       _roundResolved = false;
       _lastAnswerCorrect = false;
-      _status = 'Zapamiętaj ${_digitCountLabel(_digitCount)}.';
+      _status = context.trf('Zapamiętaj {count}.', <String, String>{
+        'count': _digitCountLabel(_digitCount),
+      });
     });
 
     _fadeTimer = Timer(const Duration(milliseconds: 1200), () {
@@ -27821,7 +40461,7 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
         _showingDigits = false;
         _digitsFading = false;
         _awaitingAnswer = true;
-        _status = 'Wpisz kod z pamięci.';
+        _status = context.tr('Wpisz kod z pamięci.');
       });
     });
   }
@@ -27840,7 +40480,7 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
       _roundResolved = false;
       _lastAnswerCorrect = false;
       _currentDigits = '';
-      _status = 'Koniec';
+      _status = context.tr('Koniec');
     });
 
     if (!widget.autoExitOnFinish) {
@@ -27880,17 +40520,28 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
           _digitCount += 1;
           _successPoints = 0;
           _status = _withMistakeStatus(
-            'Pełna seria. Wchodzisz na ${_digitCountLabel(_digitCount)}.',
+            context.trf('Pełna seria. Wchodzisz na {count}.', <String, String>{
+              'count': _digitCountLabel(_digitCount),
+            }),
           );
         } else if (completedSeries) {
           _successPoints = _requiredSuccesses;
           _status = _withMistakeStatus(
-            'Maksimum osiągnięte. Trzymasz ${_digitCountLabel(_digitCount)}.',
+            context.trf(
+              'Maksimum osiągnięte. Trzymasz {count}.',
+              <String, String>{'count': _digitCountLabel(_digitCount)},
+            ),
           );
         } else {
           _successPoints = nextProgress;
           _status = _withMistakeStatus(
-            'Dobrze. Seria $_successPoints/$_requiredSuccesses na tym poziomie.',
+            context.trf(
+              'Dobrze. Seria {progress}/{required} na tym poziomie.',
+              <String, String>{
+                'progress': '$_successPoints',
+                'required': '$_requiredSuccesses',
+              },
+            ),
           );
         }
       });
@@ -27920,8 +40571,14 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
       _lastAnswerCorrect = false;
       _successPoints = nextProgress;
       _mistakes = nextMistakes;
-      _status =
-          'To nie ten kod. Postęp $_successPoints/$_requiredSuccesses, błędy $_mistakes/2.';
+      _status = context.trf(
+        'To nie ten kod. Postęp {progress}/{required}, błędy {mistakes}/2.',
+        <String, String>{
+          'progress': '$_successPoints',
+          'required': '$_requiredSuccesses',
+          'mistakes': '$_mistakes',
+        },
+      );
     });
   }
 
@@ -27930,8 +40587,13 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
       _buildExerciseSessionRoute<void>(
         builder: (BuildContext context) {
           return FullscreenTrainerPage(
-            title: 'Drabina Pamięci • Kod Cyfr',
+            title: context.tr('Drabina Pamięci • Kod Cyfr'),
             accent: widget.accent,
+            expandBody: true,
+            showHeader: false,
+            wrapChildInSurfaceCard: false,
+            contentMaxWidth: null,
+            bodyPadding: EdgeInsets.zero,
             child: DigitSpanTrainer(
               accent: widget.accent,
               autoStart: true,
@@ -27944,6 +40606,14 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
   }
 
   Future<void> _handleStartAction() async {
+    final hasAccess = await _ensureSubscriptionAccess(
+      context,
+      exerciseTitle: context.tr('Drabina Pamięci'),
+    );
+    if (!hasAccess || !mounted) {
+      return;
+    }
+
     if (widget.fullscreenOnStart) {
       widget.onSessionStarted?.call();
       await _openFullscreenSession();
@@ -27963,6 +40633,7 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -28013,157 +40684,148 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
             color: const Color(0xFFF9F5EF),
             borderRadius: BorderRadius.circular(26),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: _isCountingDown
-                      ? _MemoryCountdownDisplay(
-                          label: _countdownLabel,
-                          accent: widget.accent,
-                          valueKeyPrefix: 'digit-span-countdown',
-                        )
-                      : _finished
-                      ? Container(
-                          key: const ValueKey<String>('digit-span-finished'),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 34,
-                            vertical: 22,
-                          ),
-                          decoration: BoxDecoration(
-                            color: widget.accent.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(26),
-                          ),
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: _isCountingDown
+                  ? _MemoryCountdownDisplay(
+                      label: _countdownLabel,
+                      accent: widget.accent,
+                      valueKeyPrefix: 'digit-span-countdown',
+                    )
+                  : _finished
+                  ? Container(
+                      key: const ValueKey<String>('digit-span-finished'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 34,
+                        vertical: 22,
+                      ),
+                      decoration: BoxDecoration(
+                        color: widget.accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                      child: Text(
+                        context.tr('Koniec'),
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          color: const Color(0xFF16212B),
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    )
+                  : _showingDigits
+                  ? AnimatedOpacity(
+                      key: const ValueKey<String>('digit-span-prompt'),
+                      opacity: _digitsFading ? 0 : 1,
+                      duration: const Duration(milliseconds: 850),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
                           child: Text(
-                            'Koniec',
+                            _currentDigits.split('').join(' '),
+                            maxLines: 1,
+                            softWrap: false,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.displaySmall?.copyWith(
+                              color: const Color(0xFF16212B),
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 2.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : _awaitingAnswer
+                  ? ConstrainedBox(
+                      key: const ValueKey<String>('digit-span-answer'),
+                      constraints: const BoxConstraints(maxWidth: 320),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          TextField(
+                            key: const ValueKey<String>(
+                              'digit-span-answer-field',
+                            ),
+                            controller: _answerController,
+                            autofocus: widget.autoStart,
+                            textAlign: TextAlign.center,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: <TextInputFormatter>[
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(_digitCount),
+                            ],
                             style: theme.textTheme.headlineMedium?.copyWith(
                               color: const Color(0xFF16212B),
                               fontWeight: FontWeight.w900,
-                              letterSpacing: 1.0,
+                              letterSpacing: 2,
                             ),
-                          ),
-                        )
-                      : _showingDigits
-                      ? AnimatedOpacity(
-                          key: const ValueKey<String>('digit-span-prompt'),
-                          opacity: _digitsFading ? 0 : 1,
-                          duration: const Duration(milliseconds: 850),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                _currentDigits.split('').join(' '),
-                                maxLines: 1,
-                                softWrap: false,
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.displaySmall?.copyWith(
-                                  color: const Color(0xFF16212B),
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 2.0,
+                            decoration: InputDecoration(
+                              hintText: context.tr('Wpisz kod'),
+                              counterText: '',
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(22),
+                                borderSide: BorderSide(
+                                  color: widget.accent.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(22),
+                                borderSide: BorderSide(
+                                  color: widget.accent.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(22),
+                                borderSide: BorderSide(
+                                  color: widget.accent,
+                                  width: 1.6,
                                 ),
                               ),
                             ),
+                            onChanged: (String value) {
+                              setState(() {});
+                              if (_awaitingAnswer &&
+                                  value.length == _digitCount) {
+                                _handleSubmit();
+                              }
+                            },
+                            onSubmitted: (_) => _handleSubmit(),
                           ),
-                        )
-                      : _awaitingAnswer
-                      ? ConstrainedBox(
-                          key: const ValueKey<String>('digit-span-answer'),
-                          constraints: const BoxConstraints(maxWidth: 320),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              TextField(
-                                key: const ValueKey<String>(
-                                  'digit-span-answer-field',
-                                ),
-                                controller: _answerController,
-                                autofocus: widget.autoStart,
-                                textAlign: TextAlign.center,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: <TextInputFormatter>[
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(_digitCount),
-                                ],
-                                style: theme.textTheme.headlineMedium?.copyWith(
-                                  color: const Color(0xFF16212B),
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 2,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Wpisz kod',
-                                  counterText: '',
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(22),
-                                    borderSide: BorderSide(
-                                      color: widget.accent.withValues(
-                                        alpha: 0.2,
-                                      ),
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(22),
-                                    borderSide: BorderSide(
-                                      color: widget.accent.withValues(
-                                        alpha: 0.2,
-                                      ),
-                                    ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(22),
-                                    borderSide: BorderSide(
-                                      color: widget.accent,
-                                      width: 1.6,
-                                    ),
-                                  ),
-                                ),
-                                onChanged: (String value) {
-                                  setState(() {});
-                                  if (_awaitingAnswer &&
-                                      value.length == _digitCount) {
-                                    _handleSubmit();
-                                  }
-                                },
-                                onSubmitted: (_) => _handleSubmit(),
-                              ),
-                            ],
-                          ),
-                        )
-                      : _roundResolved
-                      ? _MemoryRoundFeedbackBadge(
-                          key: ValueKey<String>(
-                            'digit-span-feedback-${_lastAnswerCorrect ? 'ok' : 'fail'}',
-                          ),
-                          success: _lastAnswerCorrect,
-                          successIcon: Icons.verified_rounded,
-                          failureIcon: Icons.refresh_rounded,
-                        )
-                      : Column(
-                          key: const ValueKey<String>('digit-span-idle'),
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            Icon(
-                              Icons.pin_outlined,
-                              size: 44,
-                              color: widget.accent,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Kod pojawi się tylko na moment',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                color: const Color(0xFF16212B),
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
+                        ],
+                      ),
+                    )
+                  : _roundResolved
+                  ? _MemoryRoundFeedbackBadge(
+                      key: ValueKey<String>(
+                        'digit-span-feedback-${_lastAnswerCorrect ? 'ok' : 'fail'}',
+                      ),
+                      success: _lastAnswerCorrect,
+                      successIcon: Icons.verified_rounded,
+                      failureIcon: Icons.refresh_rounded,
+                    )
+                  : Column(
+                      key: const ValueKey<String>('digit-span-idle'),
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(
+                          Icons.pin_outlined,
+                          size: 44,
+                          color: widget.accent,
                         ),
-                ),
-              ),
-            ],
+                        const SizedBox(height: 12),
+                        Text(
+                          context.tr('Kod pojawi się tylko na moment'),
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: const Color(0xFF16212B),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
           ),
         ),
         const SizedBox(height: 18),
@@ -28182,25 +40844,35 @@ class _DigitSpanTrainerState extends State<DigitSpanTrainer> {
                   ? const SizedBox.shrink()
                   : FilledButton(
                       onPressed: _handleStartAction,
-                      child: const Text('Start sesji'),
+                      child: Text(context.tr('Start sesji')),
                     ),
             (_, true, _, _, _, _) => const SizedBox.shrink(),
             (_, _, true, _, _, _) => const SizedBox.shrink(),
             (_, _, _, true, _, _) => const SizedBox.shrink(),
             (_, _, _, _, true, _) => FilledButton(
               onPressed: _beginRound,
-              child: const Text('Następny kod'),
+              child: Text(context.tr('Następny kod')),
             ),
             (_, _, _, _, _, true) => FilledButton(
               onPressed: _handleStartAction,
-              child: const Text('Start sesji'),
+              child: Text(context.tr('Start sesji')),
             ),
             _ => FilledButton(
               onPressed: _beginRound,
-              child: const Text('Nowy kod'),
+              child: Text(context.tr('Nowy kod')),
             ),
           },
         ),
+        if (widget.autoStart && !keyboardVisible) ...<Widget>[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              child: Text(context.tr('Wyjście z gry')),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -28252,6 +40924,7 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
   List<String> _options = <String>[];
   Set<String> _selectedWords = <String>{};
   String _status = 'Naciśnij Start sesji i zapamiętaj półkę słów.';
+  bool _didLocalizeInitialStatus = false;
 
   bool get _isCountingDown => _countdownValue != null;
   int get _requiredSuccesses => _wordCount >= 5 ? 3 : 2;
@@ -28262,26 +40935,36 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
     if (value == null) {
       return '';
     }
-    return value == 0 ? 'Start' : '$value';
+    return value == 0 ? context.tr('Start') : '$value';
   }
 
   String get _phaseHint {
     if (_isCountingDown) {
-      return 'Za moment zobaczysz półkę. Słowa znikną i trzeba będzie wskazać dokładnie te same.';
+      return context.tr(
+        'Za moment zobaczysz półkę. Słowa znikną i trzeba będzie wskazać dokładnie te same.',
+      );
     }
     if (_showingWords) {
-      return 'Chwytaj obrazy słów, nie czytaj ich za wolno jedno po drugim.';
+      return context.tr(
+        'Chwytaj obrazy słów, nie czytaj ich za wolno jedno po drugim.',
+      );
     }
     if (_awaitingSelection) {
-      return 'Wybierz dokładnie tyle słów, ile było na półce. Dwie pomyłki na poziomie cofają o jeden krok.';
+      return context.tr(
+        'Wybierz dokładnie tyle słów, ile było na półce. Dwie pomyłki na poziomie cofają o jeden krok.',
+      );
     }
     if (_roundResolved && _lastAnswerCorrect) {
-      return 'Dobra odpowiedź zalicza się automatycznie. Zielone potwierdzenie zniknie i za chwilę ruszy następna półka.';
+      return context.tr(
+        'Dobra odpowiedź zalicza się automatycznie. Zielone potwierdzenie zniknie i za chwilę ruszy następna półka.',
+      );
     }
     if (_roundResolved) {
-      return 'Pomyłka cofa postęp. Przy dwóch błędach na poziomie liczba słów spada.';
+      return context.tr(
+        'Pomyłka cofa postęp. Przy dwóch błędach na poziomie liczba słów spada.',
+      );
     }
-    return 'Zaczynasz od 3 słów i możesz dojść do 8.';
+    return context.tr('Zaczynasz od 3 słów i możesz dojść do 8.');
   }
 
   @override
@@ -28296,6 +40979,16 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didLocalizeInitialStatus) {
+      return;
+    }
+    _didLocalizeInitialStatus = true;
+    _status = context.tr('Naciśnij Start sesji i zapamiętaj półkę słów.');
+  }
+
   void _cancelRoundTimers() {
     _startCountdownTimer?.cancel();
     _fadeTimer?.cancel();
@@ -28304,11 +40997,12 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
   }
 
   List<String> _buildSessionWordBag({Set<String> defer = const <String>{}}) {
+    final wordPool = _memoryWordPoolForLanguage(_activeUiLanguage);
     final freshWords =
-        _memoryWordPool.where((String word) => !defer.contains(word)).toList()
+        wordPool.where((String word) => !defer.contains(word)).toList()
           ..shuffle(_random);
     final deferredWords =
-        _memoryWordPool.where((String word) => defer.contains(word)).toList()
+        wordPool.where((String word) => defer.contains(word)).toList()
           ..shuffle(_random);
     return <String>[...freshWords, ...deferredWords];
   }
@@ -28348,7 +41042,7 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
       _currentWords = <String>[];
       _options = <String>[];
       _selectedWords = <String>{};
-      _status = 'Gra startuje. Złap półkę.';
+      _status = context.tr('Gra startuje. Złap półkę.');
     });
 
     HapticFeedback.selectionClick();
@@ -28412,7 +41106,9 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
       _wordsFading = false;
       _awaitingSelection = false;
       _roundResolved = false;
-      _status = 'Zapamiętaj ${_wordCountLabel(_wordCount)}.';
+      _status = context.trf('Zapamiętaj {count}.', <String, String>{
+        'count': _wordCountLabel(_wordCount),
+      });
     });
 
     _fadeTimer = Timer(const Duration(milliseconds: 1600), () {
@@ -28432,7 +41128,7 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
         _showingWords = false;
         _wordsFading = false;
         _awaitingSelection = true;
-        _status = 'Wybierz słowa, które były na półce.';
+        _status = context.tr('Wybierz słowa, które były na półce.');
       });
     });
   }
@@ -28482,16 +41178,25 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
         if (completedSeries && !reachedCap) {
           _wordCount += 1;
           _successPoints = 0;
-          _status =
-              'Półka rośnie. Wchodzisz na ${_wordCountLabel(_wordCount)} i za chwilę leci następna.';
+          _status = context.trf(
+            'Półka rośnie. Wchodzisz na {count} i za chwilę leci następna.',
+            <String, String>{'count': _wordCountLabel(_wordCount)},
+          );
         } else if (completedSeries) {
           _successPoints = _requiredSuccesses;
-          _status =
-              'Maksimum osiągnięte. Trzymasz ${_wordCountLabel(_wordCount)} i za chwilę leci następna półka.';
+          _status = context.trf(
+            'Maksimum osiągnięte. Trzymasz {count} i za chwilę leci następna półka.',
+            <String, String>{'count': _wordCountLabel(_wordCount)},
+          );
         } else {
           _successPoints = nextProgress;
-          _status =
-              'Dobrze. Seria $_successPoints/$_requiredSuccesses na tym poziomie, następna półka za chwilę.';
+          _status = context.trf(
+            'Dobrze. Seria {progress}/{required} na tym poziomie, następna półka za chwilę.',
+            <String, String>{
+              'progress': '$_successPoints',
+              'required': '$_requiredSuccesses',
+            },
+          );
         }
       });
 
@@ -28518,12 +41223,21 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
         _wordCount -= 1;
         _successPoints = 0;
         _mistakes = 0;
-        _status = 'Dwie pomyłki. Wracasz do ${_wordCountLabel(_wordCount)}.';
+        _status = context.trf(
+          'Dwie pomyłki. Wracasz do {count}.',
+          <String, String>{'count': _wordCountLabel(_wordCount)},
+        );
       } else {
         _successPoints = nextProgress;
         _mistakes = nextMistakes;
-        _status =
-            'To nie był ten zestaw. Postęp $_successPoints/$_requiredSuccesses, błędy $_mistakes/2.';
+        _status = context.trf(
+          'To nie był ten zestaw. Postęp {progress}/{required}, błędy {mistakes}/2.',
+          <String, String>{
+            'progress': '$_successPoints',
+            'required': '$_requiredSuccesses',
+            'mistakes': '$_mistakes',
+          },
+        );
       }
     });
   }
@@ -28533,8 +41247,13 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
       _buildExerciseSessionRoute<void>(
         builder: (BuildContext context) {
           return FullscreenTrainerPage(
-            title: 'Drabina Pamięci • Półka Słów',
+            title: context.tr('Drabina Pamięci • Półka Słów'),
             accent: widget.accent,
+            expandBody: true,
+            showHeader: false,
+            wrapChildInSurfaceCard: false,
+            contentMaxWidth: null,
+            bodyPadding: EdgeInsets.zero,
             child: WordShelfTrainer(accent: widget.accent, autoStart: true),
           );
         },
@@ -28543,6 +41262,14 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
   }
 
   Future<void> _handleStartAction() async {
+    final hasAccess = await _ensureSubscriptionAccess(
+      context,
+      exerciseTitle: context.tr('Drabina Pamięci'),
+    );
+    if (!hasAccess || !mounted) {
+      return;
+    }
+
     if (widget.fullscreenOnStart) {
       widget.onSessionStarted?.call();
       await _openFullscreenSession();
@@ -28611,128 +41338,139 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
             color: const Color(0xFFF9F5EF),
             borderRadius: BorderRadius.circular(26),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: _isCountingDown
-                      ? _MemoryCountdownDisplay(
-                          label: _countdownLabel,
-                          accent: widget.accent,
-                          valueKeyPrefix: 'word-shelf-countdown',
-                        )
-                      : _showingWords
-                      ? AnimatedOpacity(
-                          key: const ValueKey<String>('word-shelf-prompt'),
-                          opacity: _wordsFading ? 0 : 1,
-                          duration: const Duration(milliseconds: 950),
-                          child: Wrap(
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: _isCountingDown
+                  ? _MemoryCountdownDisplay(
+                      label: _countdownLabel,
+                      accent: widget.accent,
+                      valueKeyPrefix: 'word-shelf-countdown',
+                    )
+                  : _showingWords
+                  ? AnimatedOpacity(
+                      key: const ValueKey<String>('word-shelf-prompt'),
+                      opacity: _wordsFading ? 0 : 1,
+                      duration: const Duration(milliseconds: 950),
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: _currentWords.map((String word) {
+                          return Container(
+                            constraints: const BoxConstraints(minWidth: 108),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 14,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEFCF8),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: widget.accent.withValues(alpha: 0.32),
+                                width: 1.4,
+                              ),
+                              boxShadow: <BoxShadow>[
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF16212B,
+                                  ).withValues(alpha: 0.08),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              word,
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: const Color(0xFF16212B),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 20,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    )
+                  : _awaitingSelection
+                  ? ConstrainedBox(
+                      key: const ValueKey<String>('word-shelf-answer'),
+                      constraints: const BoxConstraints(maxWidth: 480),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Wrap(
                             alignment: WrapAlignment.center,
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: _currentWords.map((String word) {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 14,
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: _options.map((String word) {
+                              final selected = _selectedWords.contains(word);
+                              return FilterChip(
+                                key: ValueKey<String>(
+                                  'word-shelf-option-$word',
                                 ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(
-                                    color: widget.accent.withValues(
-                                      alpha: 0.16,
-                                    ),
-                                  ),
-                                ),
-                                child: Text(
+                                label: Text(
                                   word,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: const Color(0xFF16212B),
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                                selected: selected,
+                                onSelected: (bool value) =>
+                                    _toggleWord(word, value),
+                                backgroundColor: Colors.white,
+                                selectedColor: Color.alphaBlend(
+                                  widget.accent.withValues(alpha: 0.88),
+                                  const Color(0xFF0F1A24),
+                                ),
+                                checkmarkColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  color: selected
+                                      ? Colors.white
+                                      : const Color(0xFF24303A),
+                                  fontWeight: FontWeight.w900,
+                                ),
+                                side: BorderSide(
+                                  color: selected
+                                      ? widget.accent.withValues(alpha: 0.98)
+                                      : const Color(0xFFD2D8DE),
+                                  width: selected ? 1.3 : 1.0,
                                 ),
                               );
                             }).toList(),
                           ),
-                        )
-                      : _awaitingSelection
-                      ? ConstrainedBox(
-                          key: const ValueKey<String>('word-shelf-answer'),
-                          constraints: const BoxConstraints(maxWidth: 480),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              Wrap(
-                                alignment: WrapAlignment.center,
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: _options.map((String word) {
-                                  final selected = _selectedWords.contains(
-                                    word,
-                                  );
-                                  return FilterChip(
-                                    key: ValueKey<String>(
-                                      'word-shelf-option-$word',
-                                    ),
-                                    label: Text(word),
-                                    selected: selected,
-                                    onSelected: (bool value) =>
-                                        _toggleWord(word, value),
-                                    selectedColor: widget.accent.withValues(
-                                      alpha: 0.18,
-                                    ),
-                                    checkmarkColor: widget.accent,
-                                    labelStyle: TextStyle(
-                                      color: selected
-                                          ? widget.accent
-                                          : const Color(0xFF24303A),
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                    side: BorderSide(
-                                      color: selected
-                                          ? widget.accent
-                                          : const Color(0xFFD2D8DE),
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ],
-                          ),
-                        )
-                      : _roundResolved
-                      ? _MemoryRoundFeedbackBadge(
-                          key: ValueKey<String>(
-                            'word-shelf-feedback-${_lastAnswerCorrect ? 'ok' : 'fail'}',
-                          ),
-                          success: _lastAnswerCorrect,
-                          successIcon: Icons.local_library_outlined,
-                          failureIcon: Icons.replay_circle_filled_rounded,
-                        )
-                      : Column(
-                          key: const ValueKey<String>('word-shelf-idle'),
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            Icon(
-                              Icons.inventory_2_outlined,
-                              size: 44,
-                              color: widget.accent,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Słowa pojawią się tylko na chwilę',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                color: const Color(0xFF16212B),
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
+                        ],
+                      ),
+                    )
+                  : _roundResolved
+                  ? _MemoryRoundFeedbackBadge(
+                      key: ValueKey<String>(
+                        'word-shelf-feedback-${_lastAnswerCorrect ? 'ok' : 'fail'}',
+                      ),
+                      success: _lastAnswerCorrect,
+                      successIcon: Icons.local_library_outlined,
+                      failureIcon: Icons.replay_circle_filled_rounded,
+                    )
+                  : Column(
+                      key: const ValueKey<String>('word-shelf-idle'),
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(
+                          Icons.inventory_2_outlined,
+                          size: 44,
+                          color: widget.accent,
                         ),
-                ),
-              ),
-            ],
+                        const SizedBox(height: 12),
+                        Text(
+                          context.tr('Słowa pojawią się tylko na chwilę'),
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: const Color(0xFF16212B),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
           ),
         ),
         const SizedBox(height: 18),
@@ -28752,18 +41490,28 @@ class _WordShelfTrainerState extends State<WordShelfTrainer> {
             (_, _, _, true, true, _) => const SizedBox.shrink(),
             (_, _, _, true, false, _) => FilledButton(
               onPressed: _beginRound,
-              child: const Text('Następna półka'),
+              child: Text(context.tr('Następna półka')),
             ),
             (_, _, _, _, _, true) => FilledButton(
               onPressed: _handleStartAction,
-              child: const Text('Start sesji'),
+              child: Text(context.tr('Start sesji')),
             ),
             _ => FilledButton(
               onPressed: _beginRound,
-              child: const Text('Nowa półka'),
+              child: Text(context.tr('Nowa półka')),
             ),
           },
         ),
+        if (widget.autoStart) ...<Widget>[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              child: Text(context.tr('Wyjście z gry')),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -28799,7 +41547,6 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
   int _level = 1;
   int _bestLevel = 0;
   int _points = 0;
-  bool _hasSessionStarted = false;
   bool _showingSequence = false;
   bool _awaitingInput = false;
   bool _roundCompleted = false;
@@ -28808,7 +41555,6 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
   _DirectionStep? _pressedStep;
   int? _countdownValue;
   Color _pressedColor = const Color(0xFF4C9B8F);
-  String _status = 'Naciśnij Start sesji i zapamiętaj sekwencję.';
 
   bool get _isCountingDown => _countdownValue != null;
 
@@ -28818,25 +41564,6 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
       return '';
     }
     return value == 0 ? 'Start' : '$value';
-  }
-
-  String get _phaseHint {
-    if (_isCountingDown) {
-      return 'Za chwilę zobaczysz sekwencję strzałek. Zapamiętaj ją i odtwórz bez pomyłki.';
-    }
-    if (_showingSequence) {
-      return 'Patrz na podświetlenia i nie dotykaj planszy, dopóki pokaz się nie skończy.';
-    }
-    if (_awaitingInput) {
-      return 'Klikaj strzałki dokładnie w tej kolejności, w jakiej zostały pokazane.';
-    }
-    if (_roundCompleted) {
-      return 'Runda zaliczona. Zielone potwierdzenie zniknie i za chwilę wejdziesz poziom wyżej.';
-    }
-    if (_gameOver) {
-      return 'Błędny ruch kończy rundę, więc zacznij od nowa i utrzymaj koncentrację.';
-    }
-    return 'Uruchom grę, obejrzyj układ i odtwórz go bez pośpiechu.';
   }
 
   @override
@@ -28865,7 +41592,6 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
       _level = 1;
       _bestLevel = max(_bestLevel, 0);
       _points = 0;
-      _hasSessionStarted = true;
       _sequence = <_DirectionStep>[];
       _input = <_DirectionStep>[];
       _showingSequence = false;
@@ -28875,7 +41601,6 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
       _highlighted = null;
       _pressedStep = null;
       _countdownValue = _sessionStartCountdownSeconds;
-      _status = 'Gra startuje za chwilę.';
     });
 
     HapticFeedback.selectionClick();
@@ -28931,7 +41656,6 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
       _roundCompleted = false;
       _highlighted = null;
       _pressedStep = null;
-      _status = 'Patrz i zapamiętuj.';
     });
 
     await Future<void>.delayed(const Duration(milliseconds: 350));
@@ -28960,7 +41684,6 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
     setState(() {
       _showingSequence = false;
       _awaitingInput = true;
-      _status = 'Odtwórz sekwencję w tej samej kolejności.';
     });
   }
 
@@ -28995,7 +41718,6 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
         _gameOver = true;
         _roundCompleted = false;
         _bestLevel = max(_bestLevel, _level - 1);
-        _status = 'Pomyłka. Spróbuj jeszcze raz od początku.';
       });
       return;
     }
@@ -29014,7 +41736,6 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
         _roundCompleted = true;
         _bestLevel = max(_bestLevel, _level);
         _points += earnedPoints;
-        _status = 'Dobra runda. Za chwilę wejdziesz poziom wyżej.';
       });
 
       _roundAdvanceTimer = Timer(const Duration(seconds: 2), () {
@@ -29038,8 +41759,13 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
       _buildExerciseSessionRoute<void>(
         builder: (BuildContext context) {
           return FullscreenTrainerPage(
-            title: 'Drabina Pamięci',
+            title: context.tr('Drabina Pamięci'),
             accent: widget.accent,
+            expandBody: true,
+            showHeader: false,
+            wrapChildInSurfaceCard: false,
+            contentMaxWidth: null,
+            bodyPadding: EdgeInsets.zero,
             child: MemoryChainTrainer(accent: widget.accent, autoStart: true),
           );
         },
@@ -29048,6 +41774,14 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
   }
 
   Future<void> _handleStartAction() async {
+    final hasAccess = await _ensureSubscriptionAccess(
+      context,
+      exerciseTitle: context.tr('Drabina Pamięci'),
+    );
+    if (!hasAccess || !mounted) {
+      return;
+    }
+
     if (widget.fullscreenOnStart) {
       widget.onSessionStarted?.call();
       await _openFullscreenSession();
@@ -29072,157 +41806,113 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        _hasSessionStarted
-            ? _MemoryStatsRow(
-                accent: widget.accent,
-                points: '$_points',
-                level: '$_level',
-              )
-            : Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: widget.accent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: widget.accent.withValues(alpha: 0.18),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      _status,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF16212B),
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _phaseHint,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF4A5761),
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+        _MemoryChainStatsRow(
+          accent: widget.accent,
+          points: '$_points',
+          level: '$_level',
+        ),
         const SizedBox(height: 18),
         Container(
           width: double.infinity,
-          constraints: const BoxConstraints(minHeight: 300),
-          padding: const EdgeInsets.all(24),
+          constraints: BoxConstraints(minHeight: widget.autoStart ? 420 : 320),
+          padding: const EdgeInsets.fromLTRB(24, 34, 24, 34),
           decoration: BoxDecoration(
             color: const Color(0xFFF9F5EF),
-            borderRadius: BorderRadius.circular(26),
+            borderRadius: BorderRadius.circular(30),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: _isCountingDown
-                      ? Column(
-                          key: ValueKey<String>(
-                            'memory-chain-countdown-$_countdownLabel',
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: _isCountingDown
+                  ? Column(
+                      key: ValueKey<String>(
+                        'memory-chain-countdown-$_countdownLabel',
+                      ),
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Text(
+                          _countdownLabel,
+                          style: theme.textTheme.displayMedium?.copyWith(
+                            color: widget.accent,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing:
+                                _countdownLabel == context.tr('Start')
+                                ? 0.4
+                                : 0,
                           ),
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            Text(
-                              _countdownLabel,
-                              style: theme.textTheme.displayMedium?.copyWith(
-                                color: widget.accent,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: _countdownLabel == 'Start'
-                                    ? 0.4
-                                    : 0,
-                              ),
-                            ),
-                          ],
-                        )
-                      : _roundCompleted
-                      ? _MemoryRoundFeedbackBadge(
-                          key: const ValueKey<String>(
-                            'memory-chain-feedback-ok',
+                        ),
+                      ],
+                    )
+                  : _roundCompleted
+                  ? _MemoryRoundFeedbackBadge(
+                      key: const ValueKey<String>('memory-chain-feedback-ok'),
+                      success: true,
+                      successIcon: Icons.verified_rounded,
+                      failureIcon: Icons.close_rounded,
+                    )
+                  : _gameOver
+                  ? _MemoryRoundFeedbackBadge(
+                      key: const ValueKey<String>('memory-chain-feedback-fail'),
+                      success: false,
+                      successIcon: Icons.verified_rounded,
+                      failureIcon: Icons.close_rounded,
+                    )
+                  : ConstrainedBox(
+                      key: const ValueKey<String>('memory-chain-pad'),
+                      constraints: const BoxConstraints(maxWidth: 320),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          _DirectionPadButton(
+                            step: _DirectionStep.up,
+                            accent: widget.accent,
+                            isHighlighted: _highlighted == _DirectionStep.up,
+                            isPressed: _pressedStep == _DirectionStep.up,
+                            pressedColor: _pressedColor,
+                            enabled: _awaitingInput,
+                            onTap: _handleTap,
                           ),
-                          success: true,
-                          successIcon: Icons.verified_rounded,
-                          failureIcon: Icons.refresh_rounded,
-                        )
-                      : _gameOver
-                      ? _MemoryRoundFeedbackBadge(
-                          key: const ValueKey<String>(
-                            'memory-chain-feedback-fail',
-                          ),
-                          success: false,
-                          successIcon: Icons.verified_rounded,
-                          failureIcon: Icons.refresh_rounded,
-                        )
-                      : ConstrainedBox(
-                          key: const ValueKey<String>('memory-chain-pad'),
-                          constraints: const BoxConstraints(maxWidth: 280),
-                          child: Column(
+                          const SizedBox(height: 18),
+                          Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: <Widget>[
                               _DirectionPadButton(
-                                step: _DirectionStep.up,
+                                step: _DirectionStep.left,
                                 accent: widget.accent,
                                 isHighlighted:
-                                    _highlighted == _DirectionStep.up,
-                                isPressed: _pressedStep == _DirectionStep.up,
+                                    _highlighted == _DirectionStep.left,
+                                isPressed: _pressedStep == _DirectionStep.left,
                                 pressedColor: _pressedColor,
                                 enabled: _awaitingInput,
                                 onTap: _handleTap,
                               ),
-                              const SizedBox(height: 14),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: <Widget>[
-                                  _DirectionPadButton(
-                                    step: _DirectionStep.left,
-                                    accent: widget.accent,
-                                    isHighlighted:
-                                        _highlighted == _DirectionStep.left,
-                                    isPressed:
-                                        _pressedStep == _DirectionStep.left,
-                                    pressedColor: _pressedColor,
-                                    enabled: _awaitingInput,
-                                    onTap: _handleTap,
-                                  ),
-                                  const SizedBox(width: 14),
-                                  _DirectionPadButton(
-                                    step: _DirectionStep.right,
-                                    accent: widget.accent,
-                                    isHighlighted:
-                                        _highlighted == _DirectionStep.right,
-                                    isPressed:
-                                        _pressedStep == _DirectionStep.right,
-                                    pressedColor: _pressedColor,
-                                    enabled: _awaitingInput,
-                                    onTap: _handleTap,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 14),
+                              const SizedBox(width: 18),
                               _DirectionPadButton(
-                                step: _DirectionStep.down,
+                                step: _DirectionStep.right,
                                 accent: widget.accent,
                                 isHighlighted:
-                                    _highlighted == _DirectionStep.down,
-                                isPressed: _pressedStep == _DirectionStep.down,
+                                    _highlighted == _DirectionStep.right,
+                                isPressed: _pressedStep == _DirectionStep.right,
                                 pressedColor: _pressedColor,
                                 enabled: _awaitingInput,
                                 onTap: _handleTap,
                               ),
                             ],
                           ),
-                        ),
-                ),
-              ),
-            ],
+                          const SizedBox(height: 18),
+                          _DirectionPadButton(
+                            step: _DirectionStep.down,
+                            accent: widget.accent,
+                            isHighlighted: _highlighted == _DirectionStep.down,
+                            isPressed: _pressedStep == _DirectionStep.down,
+                            pressedColor: _pressedColor,
+                            enabled: _awaitingInput,
+                            onTap: _handleTap,
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
           ),
         ),
         const SizedBox(height: 18),
@@ -29240,11 +41930,25 @@ class _MemoryChainTrainerState extends State<MemoryChainTrainer> {
             (_, _, true, _, _) => const SizedBox.shrink(),
             (_, _, _, true, _) || (_, _, _, _, true) => FilledButton(
               onPressed: _handleStartAction,
-              child: Text(_gameOver ? 'Zacznij od nowa' : 'Start sesji'),
+              child: Text(
+                _gameOver
+                    ? context.tr('Zacznij od nowa')
+                    : context.tr('Start sesji'),
+              ),
             ),
             _ => const SizedBox.shrink(),
           },
         ),
+        if (widget.autoStart) ...<Widget>[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              child: Text(context.tr('Wyjście z gry')),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -29283,13 +41987,15 @@ class _DirectionPadButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const size = 94.0;
+    final iconSize = size * 0.46;
     final background = isPressed
         ? pressedColor
         : isHighlighted
         ? accent.withValues(alpha: 0.86)
         : enabled
         ? Colors.white
-        : Colors.white.withValues(alpha: 0.58);
+        : Colors.white.withValues(alpha: 0.75);
 
     final foreground = isPressed || isHighlighted
         ? Colors.white
@@ -29302,11 +42008,11 @@ class _DirectionPadButton extends StatelessWidget {
         scale: isPressed ? 0.94 : 1,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          width: 82,
-          height: 82,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             color: background,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(size * 0.3),
             boxShadow: <BoxShadow>[
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.06),
@@ -29315,8 +42021,168 @@ class _DirectionPadButton extends StatelessWidget {
               ),
             ],
           ),
-          child: Icon(step.icon, color: foreground, size: 40),
+          child: Icon(step.icon, color: foreground, size: iconSize),
         ),
+      ),
+    );
+  }
+}
+
+class _PremiumPlanTile extends StatelessWidget {
+  const _PremiumPlanTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.durationLabel,
+    required this.selected,
+    required this.onPressed,
+    required this.buttonLabel,
+    this.featured = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String durationLabel;
+  final bool selected;
+  final VoidCallback onPressed;
+  final String buttonLabel;
+  final bool featured;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = context.appPalette;
+    final accent = featured ? const Color(0xFFC9A348) : const Color(0xFF3E639A);
+    final durationBackground = featured
+        ? const Color(0xFF4D3D12).withValues(alpha: 0.3)
+        : const Color(0xFF2C4062).withValues(alpha: 0.34);
+    final buttonTextColor = featured
+        ? const Color(0xFF1F1A10)
+        : const Color(0xFFF3F7FF);
+    final borderColor = selected
+        ? accent.withValues(alpha: 0.8)
+        : featured
+        ? accent.withValues(alpha: 0.42)
+        : palette.surfaceBorder.withValues(alpha: 0.9);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor, width: selected ? 1.7 : 1.1),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            selected
+                ? accent.withValues(alpha: featured ? 0.26 : 0.18)
+                : featured
+                ? const Color(0xFFFFF3D1).withValues(alpha: 0.82)
+                : const Color(0xFFF8FAFF).withValues(alpha: 0.92),
+            featured
+                ? const Color(0xFFF8E3A8).withValues(alpha: 0.35)
+                : palette.surfaceStrong.withValues(alpha: 0.95),
+          ],
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: selected
+                ? accent.withValues(alpha: 0.18)
+                : Colors.black.withValues(alpha: 0.06),
+            blurRadius: selected ? 24 : 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: selected ? 0.25 : 0.14),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: featured
+                ? Center(
+                    child: Text(
+                      '∞',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 34,
+                        height: 1,
+                      ),
+                    ),
+                  )
+                : Icon(icon, color: accent, size: 26),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            context.tr(title),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: palette.primaryText,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            context.tr(subtitle),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: palette.secondaryText,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: durationBackground,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: accent.withValues(alpha: 0.3)),
+            ),
+            child: Text(
+              context.tr(durationLabel),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: palette.primaryText,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: 210,
+            child: FilledButton(
+              onPressed: selected ? null : onPressed,
+              style: FilledButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: buttonTextColor,
+                disabledBackgroundColor: accent.withValues(alpha: 0.58),
+                disabledForegroundColor: buttonTextColor.withValues(alpha: 0.9),
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+              ),
+              child: Text(
+                selected ? context.tr('Aktywny') : context.tr(buttonLabel),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -29361,7 +42227,7 @@ class StatStrip extends StatelessWidget {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                label.toUpperCase(),
+                context.tr(label).toUpperCase(),
                 maxLines: 1,
                 softWrap: false,
                 style: theme.textTheme.labelLarge?.copyWith(
@@ -29379,7 +42245,7 @@ class StatStrip extends StatelessWidget {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                value,
+                context.tr(value),
                 maxLines: 1,
                 softWrap: false,
                 style: theme.textTheme.titleMedium?.copyWith(

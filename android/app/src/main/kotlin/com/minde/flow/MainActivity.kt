@@ -1,4 +1,4 @@
-package com.example.gra
+package com.minde.flow
 
 import io.flutter.embedding.android.FlutterActivity
 
